@@ -1,0 +1,162 @@
+Only in /root/humbug/analysis/perf_analysis/: cleanup.py
+diff -burB ./config.py /root/humbug/analysis/perf_analysis/config.py
+--- ./config.py	2023-02-09 21:59:39.783931756 +0000
++++ /root/humbug/analysis/perf_analysis/config.py	2023-06-26 23:55:20.202115596 +0000
+@@ -10,10 +10,10 @@
+       out['GRAFANA_EXT_HOST'] = "http://%s" % externalIp
+       out['GRAFANA_EXT_PORT'] = port
+       out['GRAFANA_USER'] = "admin"
+-      out['GRAFANA_PASS'] = "vmware"
+-      out['INFLUXDB_HOST'] = "http://%s" % internalIp #externalIp
++      out['GRAFANA_PASS'] = "admin"
++      out['INFLUXDB_HOST'] = "http://%s" % externalIp
+       out['INFLUXDB_PORT'] = 8086
+-      out['INFLUXDB_EXT_HOST'] = "http://%s" % internalIp # externalIp
++      out['INFLUXDB_EXT_HOST'] = "http://%s" % externalIp
+       out['INFLUXDB_EXT_PORT'] = 8086
+       out['INFLUXDB_USER'] = "smly"
+       out['INFLUXDB_PASS'] = "my_secret_password"
+Only in /root/humbug/analysis/perf_analysis/: dashboard.json
+Only in /root/humbug/analysis/perf_analysis/: dashboard_noRepeat.json
+Only in .: diff.log
+Only in .: get-pip.py
+Only in /root/humbug/analysis/perf_analysis/: grafana_2.6.0_amd64.deb
+Only in /root/humbug/analysis/perf_analysis/: GrafanaLinkInfluxDb.py
+Only in /root/humbug/analysis/perf_analysis/: grafana_v8_dashboards
+Only in /root/humbug/analysis/perf_analysis/: humbugRedis.py
+Only in /root/humbug/analysis/perf_analysis/: influxdb-metrics_rev1.json
+diff -burB ./perf_analysis.py /root/humbug/analysis/perf_analysis/perf_analysis.py
+--- ./perf_analysis.py	2023-02-09 21:59:39.795931833 +0000
++++ /root/humbug/analysis/perf_analysis/perf_analysis.py	2023-06-26 23:55:20.278115998 +0000
+@@ -11,7 +11,7 @@
+ from PerfStatsParser import VSANPerfDumpParser, chunks, getValidParsers, INFLUX_BATCH
+ from grafanaUtil import GrafanaClient
+ from dashboardUtil import DashboardGenerator
+-#from humbugRedis import HumbugRedisInstance as Redis
++from humbugRedis import HumbugRedisInstance as Redis
+ import hashlib
+ 
+ def isGrafanaV8():
+@@ -221,10 +221,10 @@
+    config.HumbugConfig.configParams(grafanaIntIp, grafanaExtIp, port)
+    bundle = name.replace('.', '_').replace('-', '_')
+    redisKey = '%s_python' % name
+-   #redis = Redis.instance()
++   redis = Redis.instance()
+ 
+    def RedisUpdatePerfLink():
+-      if False: #redis:
++      if redis:
+          # we can give perf url at this step for avoiding parsing and inserting perf data points
+          if isGrafanaV8():
+             bundlePostfix = ''
+@@ -234,7 +234,7 @@
+          redis.hset(redisKey, 'perflink', perfUrlLink)
+ 
+    def RedisUpdateError(errorStr):
+-      if False: #redis:
++      if redis:
+          redis.hset(redisKey, 'error', errorStr)
+ 
+    _config_default_logger(bundle)
+@@ -257,11 +257,14 @@
+ 
+    # 1) Create influx DB that will store all our metrics for the given bundle
+    logging.debug("Create DB and write data points")
+-   if False: #redis:
++   if redis:
+       redis.hset(redisKey, 'progress', 'CreatingInfluxDb')
+       redis.expire(redisKey, 24 * 60 * 60) # expired within one day
+    try:
++      if skipInflux != True:
+       CreateInfluxDatabase(bundle)
++      else:
++         logging.info("Skipping creating influx database")
+    except Exception as e:
+       errorStr = "Failed to create database and write datapoints: %s" % (e)
+       logging.error(errorStr)
+@@ -274,7 +277,7 @@
+       if skipInflux:
+          logging.info("Skipping writing %u data points to influx DB" % len(batchData))
+          return
+-      if False: #redisKey and redis and progressStr:
++      if redisKey and redis and progressStr:
+          redis.hset(redisKey, 'progress', progressStr)
+          logging.info(progressStr)
+ 
+@@ -304,10 +307,8 @@
+    # P1 & P2 data parsing and write out to influx DB
+    t2 = time.time()
+    try:
+-      fileprefix = "*perf_stats_with_dump*"
+-      filetype = os.path.join(os.path.dirname(os.path.realpath(fileName)), fileprefix)
+-      files=sorted(glob.glob(filetype))
+-      fileprefix = "*selective_with_dump*"
++      files =[]
++      for fileprefix in ["*perf_stats_with_dump*", "*selective_with_dump*", "*ioinsight_stats_with_dump*"]:
+       filetype = os.path.join(os.path.dirname(os.path.realpath(fileName)), fileprefix)
+       files.extend(glob.glob(filetype))
+       if files and fileName in files:
+@@ -339,7 +340,7 @@
+    # 4) Register bundle DB with Grafana, create/adjust our dashboards
+    # creating Grafana dashboards very quickly, so mark redis progress done
+    # also add error msg if creating Grafana dashboards has issues and report to UI
+-   if False: #redis:
++   if redis:
+       redis.hset(redisKey, 'progress', 'finished')
+    bundlePostfix = ""
+    try:
+@@ -349,7 +350,6 @@
+          if not os.path.exists(graphFilename):
+             graphFilename = None
+          if not isGrafanaV8():
+-            print(second)
+             bundlePostfix = setupGrafana(bundle, entities, graphFilename)
+    except Exception as e:
+       errorStr = "Failed to setup grafana: %s" % (e)
+@@ -362,7 +362,7 @@
+ 
+    # 5) Craft output
+    url = GenerateDashboardURL(bundle, bundlePostfix)
+-   if False: #redis:
++   if redis:
+       redis.hset(redisKey, 'perflink', url)
+    logging.info(url)
+    print(url)
+@@ -370,7 +370,7 @@
+ 
+ def _config_default_logger(bundle_name):
+    root = logging.getLogger()
+-   root.setLevel(logging.INFO)
++   root.setLevel(logging.DEBUG)
+ 
+    default_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ 
+diff -burB ./PerfStatsParser.py /root/humbug/analysis/perf_analysis/PerfStatsParser.py
+--- ./PerfStatsParser.py	2023-06-27 18:41:51.424184797 +0000
++++ /root/humbug/analysis/perf_analysis/PerfStatsParser.py	2023-06-26 23:55:20.202115596 +0000
+@@ -33,7 +33,7 @@
+ import StringIO
+ import logging
+ import uuid
+-#from humbugRedis import HumbugRedisInstance as Redis
++from humbugRedis import HumbugRedisInstance as Redis
+ 
+ import threading
+ import Queue
+@@ -84,7 +84,7 @@
+       self.timeStampCache = {}
+       self.cmmdsByUuid = None
+       self.newLayout = False
+-#      self.redis = Redis.instance()
++      self.redis = Redis.instance()
+       self.redisKey = redisKey
+       self.entities = []
+       self.dataPointsNum = 0
+Only in /root/humbug/analysis/perf_analysis/: phonehome_data
+Only in /root/humbug/analysis/perf_analysis/: readme.txt
+Only in /root/humbug/analysis/perf_analysis/: requirements.txt
+Only in /root/humbug/analysis/perf_analysis/: setupInfluxMonitoring.py
+Only in /root/humbug/analysis/perf_analysis/: test_perf_analysis.py
+Only in /root/humbug/analysis/perf_analysis/: testPerfData
+Only in .: vsanmgmtObjects.py

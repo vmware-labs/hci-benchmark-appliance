@@ -1,0 +1,31 @@
+#!/bin/sh
+
+###
+### A simple wrapper script that allows dmotioner script to be run on 
+### an esx host. This should really be replaced by letting the esx
+### environment default to such a setup. All this requires is that we
+### always install the pyVim libraries and that we set LD_LIBRARY_PATH
+### to include libtypes.so
+###
+
+COPYLOC=/exit14/home/mts/esx-dali
+DMOTIONERLOC=/usr/lib/vmware/bin
+DMOTIONERSCRIPT=dmotioner.py
+
+if [ ! -e "$DMOTIONERLOC/$DMOTIONERSCRIPT" ]; then
+   # Try to setup all necessary files from /exit14/home
+   if [ ! -e "$COPYLOC" ]; then
+      echo "Could not find $COPYLOC"
+      echo "Please verify that $COPYLOC is mounted and accessible to the current user"
+      exit -1
+   fi
+   cp -f $COPYLOC/bora/vim/py/pyVim/* /usr/lib/python2.2/pyVim/
+   cp -f $COPYLOC/bora/vim/py/tests/dmotioner.py $DMOTIONERLOC/$DMOTIONERSCRIPT
+   # Copy self over as well
+   cp -f $COPYLOC/bora/vim/py/tests/dmotioner /usr/bin/
+   echo "Setup completed. Necessary files copied to local machine."
+else
+   echo "Dmotioner already setup locally. Skipping copy phase."
+fi
+
+LD_LIBRARY_PATH="/usr/lib/vmware/hostd" python $DMOTIONERLOC/$DMOTIONERSCRIPT "$@"

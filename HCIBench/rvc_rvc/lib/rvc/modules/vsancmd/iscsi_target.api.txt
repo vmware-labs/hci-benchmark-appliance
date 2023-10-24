@@ -1,0 +1,7 @@
+require 'json'
+
+# load VSAN iSCSI target (VIT) Vmomi types
+
+RbVmomi::VIM.loader.add_types(
+JSON.load('{"VimHostVsanIscsiTargetSystem": {"kind": "managed", "methods": {"QueryVsanIscsiTargetSystemVersion": {"params": [], "result": {"version-id-ref": "vim.version.version9", "name": "result", "is-array": false, "wsdl_type": "xsd:string", "is-optional": false, "type-id-ref": "string"}}}, "wsdl_base": "ManagedObject", "type-id": "vim.host.VsanIscsiTargetSystem", "base-type-id": "vmodl.ManagedObject", "props": []}}')
+)

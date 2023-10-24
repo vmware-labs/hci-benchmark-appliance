@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en" ng-app="vsan">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!--
+  <link rel="stylesheet/less" href="css/main.less">
+  <script src="css/less-1.3.3.min.js"></script>
+  -->
+  <link href="observer.css" rel="stylesheet">
+  <title>Aggregate results</title>
+
+  <script src="externallibs/js/jquery.js"></script>
+  <script src="externallibs/js/bootstrap.min.js"></script>
+  <script src="externallibs/js/jquery-1.9.1.min.js"></script>
+  <script src="externallibs/js/jquery-ui.min.js"></script>    
+  <script src="externallibs/js/d3.min.js"></script>
+  <script src="externallibs/js/angular.min.js"></script>
+  <link href="externallibs/css/font-awesome.css" rel="stylesheet">
+  <script src="graphs.js"></script>
+  <script>
+
+function registerOverviewGraphs(tabname, hosts, prefix) {
+  return;
+for (var key in hosts) {
+    var filename = hosts[key]
+    var hostPrefix = prefix + "-" + convertToPrefix(key)
+    registerGraph(
+      tabname, 
+      filename,
+      computeDomGraphSpecsThumb,
+      hostPrefix,
+      true
+    )
+  }
+}
+var hosts = [];
+var overviewKeys = <%= JSON.dump(overviewLabel.sort_by{|k,tr| -tr['firstTS']}.map{|x| x[0]}) %>;
+var overview = <%= JSON.dump(overviewLabel) %>;
+var overviewDirs = <%= JSON.dump(overviewUrl) %>;
+</script>
+
+</head>
+<body ng-controller="VmListCtrl">
+
+    <div class="tabbable">
+      <ul class='nav nav-tabs'>
+        <li class='active'>
+          <a href='#overview-tab' data-toggle='tab' 
+             onclick='javascript: showTabGraphs("overview-tab")'>Overview</a>
+        </li>
+      </ul>
+      
+      <div class="tab-content">
+        <div style="height: 800px" class="tab-pane active" id="overview-tab">
+<div class="btn-group">
+  <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown">
+    Select time range <span class="caret"></span>
+  </button>
+  <ul class="dropdown-menu" role="menu">
+    <li ng-repeat="key in overviewKeys" class="timerangeSelectorLi" style="font-size: 13px; height: 16px">
+      <a target="_new" style="padding-top: 1px; padding-bottom: 1px" href="{{overviewDirs[key]}}">
+      {{overview[key]['firstTS'] * 1000 | date:'medium'}} -
+      {{overview[key]['lastTS'] * 1000 | date:'medium'}}
+      <span ng-if="key == 'current'"> (Current) </span>
+      </a>
+   </li>
+  </ul>
+</div>
+
+<!--
+          <table class="graphGrid">
+            <tr ng-repeat="key in overviewKeys">
+              <td style="width: 1000px">
+                {{overview[key]['firstTS'] * 1000 | date:'medium'}} - 
+                {{overview[key]['lastTS'] * 1000 | date:'medium'}} - 
+                <span ng-if="key == 'current'">Current - </span>
+                <a href="{{overviewDirs[key]}}">Show</a>
+              </td>
+              <td>
+                <div id='2overview-{{convertToPrefix(key)}}'></div>
+              </td>
+            </tr>
+          </table>
+-->
+          <script>
+            registerOverviewGraphs(
+               'overview-tab', 
+               <%= JSON.dump(overview) %>, 
+               'overview'
+            )
+            showTabGraphs("overview-tab")
+          </script>
+        </div>
+      </div>
+    </div>
+    
+    <div class="logo">
+      <img style="height: 17px" src="vmw_logo_white.png">
+    </div>
+</body>
+</html>

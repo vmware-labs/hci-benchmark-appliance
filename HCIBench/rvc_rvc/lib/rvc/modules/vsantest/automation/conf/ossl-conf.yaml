@@ -1,0 +1,10 @@
+# Ruby
+ruby: /usr/bin/ruby
+
+# Open SSL
+openssl: /usr/bin/openssl
+cipher: aes-256-cbc
+keyfile: /opt/automation/conf/key.bin
+
+# OSSL Wrapper
+script: /opt/automation/lib/ossl_wrapper_cli.rb

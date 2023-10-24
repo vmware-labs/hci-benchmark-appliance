@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en" ng-app="vsan">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!--
+  <link rel="stylesheet/less" href="css/main.less">
+  <script src="css/less-1.3.3.min.js"></script>
+  -->
+  <link href="observer.css" rel="stylesheet">
+  <title>Login</title>
+
+  <script src="externallibs/js/jquery.js"></script>
+  <script src="externallibs/js/bootstrap.min.js"></script>
+  <script src="externallibs/js/jquery-1.9.1.min.js"></script>
+  <script src="externallibs/js/jquery-ui.min.js"></script>    
+  <script src="externallibs/js/d3.min.js"></script>
+  <script src="externallibs/js/angular.min.js"></script>
+  <link href="externallibs/css/font-awesome.css" rel="stylesheet">
+  <script src="graphs.js"></script>
+  <script>
+
+var hosts = [];
+var overviewKeys = [];
+var overview = {};
+var overviewDirs = {};
+</script>
+
+</head>
+<body ng-controller="VmListCtrl">
+
+    <div class="tabbable">
+      <ul class='nav nav-tabs'>
+        <li class='active'>
+          <a href='#overview-tab' data-toggle='tab' 
+             onclick='javascript: showTabGraphs("overview-tab")'>Login</a>
+        </li>
+      </ul>
+      
+      <div class="tab-content">
+        <div style="height: 800px" class="tab-pane active" id="overview-tab">
+<% if error %>
+<div class="alert alert-error">
+  <%= error %>
+</div>
+<% end %>
+<% if infoMsg %>
+<div class="alert alert-block">
+  <%= infoMsg %>
+</div>
+<% end %>
+<% if successMsg %>
+<div class="alert alert-success">
+  <%= successMsg %>
+</div>
+<% end %>
+<form class="form-horizontal" action="/login.html" method="POST">
+  <div class="control-group">
+    <label class="control-label" for="vc">VC server</label>
+    <div class="controls">
+      <span id="vc">
+        Hostname: <%= @vcInfo['hostname'] %><br>
+        Product: <%= @vcInfo['about']['fullName'] %>
+      </span>
+    </div>
+  </div>
+  <div class="control-group">
+    <label class="control-label" for="username">VC Username</label>
+    <div class="controls">
+      <input type="text" disabled id="username" value="<%= username %>" placeholder="username" name="username">
+    </div>
+  </div>
+  <div class="control-group">
+    <label class="control-label" for="password">Password</label>
+    <div class="controls">
+      <input type="password" id="password" placeholder="password" name="password">
+    </div>
+  </div>
+  <div class="control-group">
+    <div class="controls">
+      <button type="submit" class="btn">Login</button>
+    </div>
+  </div>
+</form>
+        <script>
+            showTabGraphs("overview-tab")
+          </script>
+        </div>
+      </div>
+    </div>
+    
+    <div class="logo">
+      <img style="height: 17px" src="vmw_logo_white.png">
+    </div>
+</body>
+</html>

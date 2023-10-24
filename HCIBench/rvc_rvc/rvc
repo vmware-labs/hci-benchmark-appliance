@@ -1,0 +1,5 @@
+#!/bin/bash
+VMWARE_ROOT=/opt/vmware
+RUBY=/usr/bin/ruby
+
+RVC_READLINE=/lib64/libreadline.so.6 exec $RUBY -I$VMWARE_ROOT/rvc/lib -I$VMWARE_ROOT/rvc/gems/rbvmomi-master/lib $VMWARE_ROOT/rvc/bin/rvc "$@"

@@ -1,0 +1,8 @@
+% Manifest name: VSANPerfHcibench
+% Manifest group: Storage
+% Manifest default: Enabled
+% Manifest tag: storage,vsanperfsvc
+# action Options file/command
+
+run TIMEOUT=10,IGNORE_ERROR /sbin/cmmds-tool find -f python
+run TIMEOUT=180,IGNORE_ERROR python /tmp/vsan-perfsvc-status.py selective_with_dump -st START_TIME -et END_TIME

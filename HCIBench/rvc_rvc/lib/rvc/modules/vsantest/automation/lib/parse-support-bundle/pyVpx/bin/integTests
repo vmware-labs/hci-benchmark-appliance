@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# file: integTests
+# purpose: driver for hostd integration tests
+# arguments: [xml config file]
+
+
+DLOC=./integtests.d
+DRIVER=$DLOC/integDriver.py
+ARGS=$*
+
+function Log()
+{
+   echo "`date \"+%Y-%m-%d %H:%M:%S\"` [$1] $2"
+}
+
+# set PRODUCT based on observed path
+function SetProductEnv
+{
+    if [ "$PRODUCT" = "" ]; then
+        TDIR=`pwd`/
+        while [ $TDIR ]; do
+            if [ -d $TDIR/wgs ]; then
+                export PRODUCT=wgs
+                TDIR=""
+            fi
+            if [ -d $TDIR/server ]; then
+                export PRODUCT=server
+                TDIR=""
+            fi
+            TDIR=${TDIR%/*}
+        done
+    fi
+
+    if [ "$PRODUCT" = "" ]; then
+        Log "WARNING" "PRODUCT could not be determined from path: `pwd`"
+    else
+        Log "INFO" "Using PRODUCT=$PRODUCT"
+    fi
+}
+
+# setup VMTREE if not already set
+function SetupEnv
+{
+# relies on sentinel README at same level as 'build' dir
+    if [ "$VMTREE" = "" ]; then
+        if [ "$BUILDROOT" ]; then
+      # py.sh expects VMTREE even if BUILDROOT is set
+            VMTREE=$BUILDROOT/../../..
+        else
+            TDIR=`pwd`/
+            while [ $TDIR ]; do
+                if [ -f $TDIR/README ]; then
+                    export VMTREE=$TDIR
+                    TDIR=""
+                    Log "INFO" "Using VMTREE=$VMTREE"
+                fi
+                TDIR=${TDIR%/*}
+            done
+
+        fi
+    fi
+    if [ "$VMTREE" = "" ]; then
+        Log "ERROR" "Env var VMTREE or BUILDROOT not set, exiting."
+        exit 1
+    fi
+}
+
+# main
+SetupEnv
+SetProductEnv
+
+if [ `uname -s` = "Linux" ]; then
+   OS='lin'
+elif [ `uname -s` = "Darwin" ]; then
+   OS='mac'
+else
+   Log "ERROR" "Unsupported OS"
+   exit 1
+fi
+
+if [ `uname -m` = "x86_64" ]; then
+   ARCH="64"
+else
+   ARCH="32"
+fi
+
+PYTHON25=/build/toolchain/$OS$ARCH/python-2.5/bin/python
+LOCAL_PYTHON=`which python`
+
+if [ -f $PYTHON25 ]; then
+   PYTHON=$PYTHON25
+   Log "INFO" "Using PYTHON=$PYTHON25"
+else
+   PYTHON=$LOCAL_PYTHON
+   Log "INFO" "Using PYTHON=$LOCAL_PYTHON"
+fi
+Log "INFO" "Using PYTHONPATH=$PYTHONPATH"
+
+if [ ! -f $DRIVER ]; then
+    Log "ERROR" "Test driver file \"$DRIVER\" not found, exiting."
+    exit 1
+fi
+
+if [ "$ARGS" = "" ]; then
+  ARGS=./integTests.xml
+else
+  ARGS=$*
+fi
+
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+exec $PYTHON $DRIVER $ARGS

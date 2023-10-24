@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="32px" height="32px" viewBox="0 0 32 32" enable-background="new 0 0 32 32" xml:space="preserve">
+<rect x="14.25" y="9.5" fill="#68B2F8" stroke="#306182" stroke-miterlimit="10" width="14" height="14"></rect>
+<rect x="8.25" y="3.5" fill="#68B2F8" stroke="#306182" stroke-miterlimit="10" width="14" height="14"></rect>
+<rect x="4.25" y="14.5" fill="#68B2F8" stroke="#306182" stroke-miterlimit="10" width="14" height="14"></rect>
+<polyline fill="none" stroke="#306182" stroke-miterlimit="10" points="8.25,14 8.25,17.5 18.75,17.5 "></polyline>
+<polyline fill="none" stroke="#306182" stroke-miterlimit="10" points="18.75,23.5 14.25,23.5 14.25,9.5 22.75,9.5 "></polyline>
+</svg>

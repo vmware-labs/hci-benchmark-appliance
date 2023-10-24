@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en" ng-app="vsan">
+<head>
+  <% inventoryAnalyzerTabs = inventoryAnalyzerTabs.sort_by do |key, val|
+       key[2]
+     end
+  %>
+  <%= refreshString %>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!--
+  <link rel="stylesheet/less" href="css/main.less">
+  <script src="css/less-1.3.3.min.js"></script>
+  -->
+  <link href="observer.css" rel="stylesheet">
+  <title><%= testTitleString %></title>
+
+  <script src="externallibs/js/jquery-1.9.1.min.js"></script>
+  <script src="externallibs/js/bootstrap.min.js"></script>
+  <script src="externallibs/js/jquery-ui.min.js"></script>
+  <script src="externallibs/js/d3.min.js"></script>
+  <script src="externallibs/js/angular.min.js"></script>
+  <link href="externallibs/css/font-awesome.css" rel="stylesheet">
+
+<% if opts[:timerange] %>
+  <link href="externallibs/css/datepicker.min.css" rel="stylesheet">
+  <script src="externallibs/js/bootstrap-datepicker.min.js"></script>
+<% end %>
+
+  <script src="graphs.js"></script>
+  <script>
+    function showfaults(forwhat) {
+      <%
+        keys = tasksAnalyzer.taskStats.keys
+        keys << 'all'
+        keys.each do |k|
+      %>
+        var faultsDivFor_<%= var(k) %> = document.getElementById("faults-<%= var(k) %>")
+        if (forwhat == "faults-<%= var(k) %>") {
+          faultsDivFor_<%= var(k) %>.style.display = "block";
+        } else {
+          faultsDivFor_<%= var(k) %>.style.display = "none";
+        }
+      <%
+        end
+      %>
+    }
+
+var hosts = <%= JSON.dump(inventoryAnalyzer.hosts) %>;
+var overviewKeys = [];
+var overview = {};
+var overviewDirs = {};
+
+
+function toggleLsomHostDiv() {
+  hostname = $("#lsom-host-dropdown").val()
+  id = "lsom-host-" + hostname
+  $(".lsom-host-div").hide()
+  $("#" + escapeColon(id.replace(/\./g, "_"))).show()
+  showTabGraphs(id)
+}
+
+
+function registerDomGraphs(tabname, hosts, prefix) {
+  var graphNames = ["latency", "iops", "tput", "congestion", "oio", "latencySD"]
+  if (tabname == "vsan-client-host-tab") {
+     graphNames.push("domClientCacheHitRate")
+  }
+  for (var i in hosts) {
+    var host = hosts[i]
+    var hostPrefix = prefix + "-" + host.replace(/\./g, '-')
+    addGraphDivs(hostPrefix, graphNames)
+    registerGraph(
+      tabname,
+      'jsonstats/dom/domobj-' + host + '_thumb.json',
+      computeDomGraphSpecsThumb,
+      hostPrefix
+    )
+  }
+}
+
+
+function registerStGraphs(tabname, hosts) {
+  for (var i in hosts) {
+    var host = hosts[i]
+    registerGraph(
+      tabname,
+      'jsonstats/mem/system-' + host + '_thumb.json',
+      computeSysMemGraphSpecsThumb,
+      "systemmem-" + host.replace(/\./g, '-'),
+      true
+    )
+    registerGraph(
+      tabname,
+      'jsonstats/pcpu/wdtsum-' + host + '_thumb.json',
+      computeWdtSumGraphSpecsThumb,
+      "wdtsum-" + host.replace(/\./g, '-'),
+      true
+    )
+    registerGraph(
+      tabname,
+      'jsonstats/pcpu/pcpu-' + host + '_thumb.json',
+      computePcpuGraphSpecs,
+      "pcpust-" + host.replace(/\./g, '-'),
+      true
+    )
+  }
+}
+
+function registerNetworkGraphs(tabname, hosts) {
+  for (var i in hosts) {
+    var host = hosts[i]
+    registerGraph(
+      tabname,
+      'jsonstats/misc/pnics-' + host + '_thumb.json',
+      computePnicsGraphSpecsThumb,
+      "pnics-" + host.replace(/\./g, '-'),
+      true
+    )
+    registerGraph(
+      tabname,
+      'jsonstats/misc/vmknic-' + host + '_thumb.json',
+      computeTcpGraphSpecsThumb,
+      "tcp-" + host.replace(/\./g, '-'),
+      true
+    )
+  }
+}
+
+function registerPhysDiskGraphs(tabname, keys) {
+  for (var i in keys) {
+    var key = keys[i]
+    var host = key[0]
+    var dev = key[1]
+    var md5Dev = key[2]
+    registerGraph(
+      tabname,
+      'jsonstats/lsom/physdisk-' + host + '-' + md5Dev + '_thumb.json',
+      computePhysDiskGraphSpecsThumb,
+      convertToPrefix("lsom-physdisk-" + host + '-' + dev),
+      true
+    )
+  }
+}
+
+</script>
+
+</head>
+<body ng-controller="VmListCtrl"
+<% if opts[:timerange] %>
+      ng-init="timerangeOn='1'; timerangeShowing=<%= JSON.dump(inventoryAnalyzer.dumpTimerange).gsub('"', "'") %>;"
+<% end %>
+>
+
+    <div class="tabbable">
+      <ul class='nav nav-tabs'>
+        <% if !skipTasksTab %>
+        <li class='active'>
+          <a href='#tasks-tab' data-toggle='tab'>Tasks</a>
+        </li>
+        <% end %>
+      <%
+        i = 0
+        inventoryAnalyzerTabs.each do |key, content|
+          label, tabname, visibility = key
+      %>
+        <li <%= "class='active'" if i == 0 && skipTasksTab %> >
+          <a href='#<%= tabname %>' data-toggle='tab'
+             onclick='javascript: showTabGraphs("<%= tabname %>")'>
+            <%= label %>
+          </a>
+        </li>
+      <%
+          i += 1
+        end
+      %>
+        <li>
+          <a href='#vm-tab' data-toggle='tab' ng-click="showVmTab=true">VMs</a>
+        </li>
+        <li>
+          <a href='#about-tab' data-toggle='tab'>About</a>
+        </li>
+        <li>
+          <a href='#net-tab' data-toggle='tab'
+             onclick='javascript:showTabGraphs("net-tab")'>Network</a>
+        </li>
+        <li class="dropdown">
+          <a class="dropdown-toggle"
+             data-toggle="dropdown"
+             href="#">
+            vSAN (More)
+            <b class="caret"></b>
+          </a>
+          <ul class="dropdown-menu">
+            <li>
+              <a href='#vsan-congestion-tab' data-toggle='tab'
+                 onclick='javascript:showTabGraphs("vsan-congestion-tab")'>Congestion</a>
+            </li>
+            <li>
+              <a href='#distribution-tab' data-toggle='tab'
+                 onclick='javascript:showTabGraphs("distribution-tab")'>Distribution</a>
+            </li>
+            <% if !skipTasksTab %>
+            <li>
+              <a href='#clom-tab' data-toggle='tab'
+                 onclick='javascript:showTabGraphs("clom-tab")'>CLOM</a>
+            </li>
+            <% end %>
+            <li>
+              <a href='#vsansparse-tab' data-toggle='tab'
+                 onClick='javascript:vsansparseTabRefresh()' >VSANSparse</a>
+            </li>
+            <!--li>
+              <a href='#cmmds-tab' data-toggle='tab'
+                 onclick='javascript: showTabGraphs("cmmds-tab")'>CMMDS</a>
+            </li-->
+          </ul>
+        </li>
+        <% if $rvc_observer_enable_nfstab || !skipTasksTab %>
+        <li class="dropdown">
+          <a class="dropdown-toggle"
+             data-toggle="dropdown"
+             href="#">
+            Other
+            <b class="caret"></b>
+          </a>
+          <ul class="dropdown-menu">
+            <li>
+              <a href='#nfs-tab' data-toggle='tab'
+                 onclick='javascript: showTabGraphs("nfs-tab")'>NFS</a>
+            </li>
+            <li>
+              <a href='#vscsihost-tab' data-toggle='tab'
+                 onclick='javascript: showTabGraphs("vscsihost-tab")'>VSCSI</a>
+            </li>
+            <li>
+              <a href='#sum-tab' data-toggle='tab'
+                 onclick='javascript: showTabGraphs("sum-tab")'>IO Sum</a>
+            </li>
+            <li>
+              <a href='#st-tab' data-toggle='tab'
+                 onclick='javascript: showTabGraphs("st-tab")'>System</a>
+            </li>
+          </ul>
+        </li>
+        <% end %>
+      </ul>
+
+      <div class="tab-content">
+        <% if opts[:timerange] %>
+<script>
+</script>
+<div>
+<div class="btn-group">
+  <button type="button" class="btn btn-default">
+    Showing:
+      {{timerangeShowing['firstTS'] * 1000  | date:'medium'}} -
+      {{timerangeShowing['lastTS'] * 1000 | date:'medium'}}
+  </button>
+  <button type="button" id="datapickerbutton" class="btn btn-default">Today <span class="caret"></span></button>
+  <button type="button" class="btn btn-default btn-sm dropdown-toggle" data-toggle="dropdown">
+    Select time range <span class="caret"></span>
+  </button>
+  <ul class="dropdown-menu" role="menu">
+    <li ng-repeat="key in overviewKeys | filterTimerange:this" class="timerangeSelectorLi" style="font-size: 13px; height: 16px">
+      <a style="padding-top: 1px; padding-bottom: 1px" href="{{overviewDirs[key]}}">
+      {{overview[key]['firstTS'] * 1000 | date:'medium'}} -
+      {{overview[key]['lastTS'] * 1000 | date:'medium'}}
+      <span ng-if="key == 'current'"> (Current) </span>
+      </a>
+   </li>
+  </ul>
+  <script>
+    $('#datapickerbutton').datepicker({
+        format: "yyyy/mm/dd",
+        todayBtn: "linked",
+        autoclose: true,
+        todayHighlight: true
+    }).on('changeDate', function(e){
+       var scope = angular.element($("body")).scope();
+       scope.$apply(function(){
+         scope.overviewDay = $('#datapickerbutton').datepicker('getDate');
+       })
+       var dateStr = scope.overviewDay.toDateString().substring(4);
+       $('#datapickerbutton')[0].innerHTML = dateStr + ' <span class="caret"></span>';
+    });
+  </script>
+</div>
+
+</div>
+        <% end %>
+        <%
+          i = 0
+          inventoryAnalyzerTabs.each do |key, content|
+            label, tabname, visibility = key
+        %>
+          <div class="tab-pane <%= 'active' if i == 0 && skipTasksTab %>" id="<%= tabname %>">
+            <%= content %>
+            <% if i == 0 && skipTasksTab %>
+              <script>showTabGraphs("<%= tabname %>")</script>
+            <% end %>
+          </div>
+        <%
+            i += 1
+          end
+        %>
+
+        <div class="tab-pane" id="distribution-tab">
+          <h3 onclick='javascript: $("#dist-tab-help").toggle("fast")'>
+          <i class="icon-question-sign"></i> What am I looking at </h3>
+          <div class='tabhelp' id='dist-tab-help'>
+          <p>This view shows how various physical and in-memory objects
+          are distributed across the vSAN cluster.</p><p>
+          Components are the slices/pieces of vSAN objects stored on
+          HDDs. They include IO components and witnesses. Balancing
+          components across the cluster is an important sideeffect of
+          balancing for performance and space. But in addition, in v1
+          of vSAN there is 3000 components per host limit.</p><p>
+          DOM owners are in-memory state inside vSAN that the user
+          can't control. The information is shown here for the benefit
+          of VMware Support.
+          </p></div>
+          <%
+            graphs = ""
+            prefix = "distribution"
+            types = ['lsom-components', 'lsom-iocomponents', 'dom-owners', 'dom-clients', 'dom-colocated']
+            types.each do |i|
+              graphs += "<div class=\"mini-graph-container\"><div class=\"graphmini #{prefix}-#{i}\"></div></div>\n"
+            end
+            graphs += "<script>registerGraph('distribution-tab', 'jsonstats/misc/distribution_thumb.json', computeDistributionGraphSpecsThumb, '#{prefix}')</script>"
+          %>
+          <b>Distributions across hosts:</b>
+          <a href="graphs.html?group=distribution">Full graphs</a><br>
+          <%= graphs %>
+        </div>
+        <% if !skipTasksTab || false %>
+        <div class="tab-pane" id="st-tab">
+          <table class="graphGrid">
+            <tr ng-repeat="host in hosts">
+              <td style="width: 150px;">
+                {{host}}<br>
+                <!--
+                <a href="graphs.html?group=systemmem&host={{host}}">Mem graphs</a><br>
+                <a href="graphs.html?group=wdtsum&host={{host}}">Wdt graphs</a><br>
+                <a href="graphs.html?group=pnics&host={{host}}">Net graphs</a><br>
+                -->
+              </td>
+              <td>
+                <div id='systemmem-{{convertToPrefix(host)}}'></div>
+              </td>
+              <td>
+                <div id='pcpust-{{convertToPrefix(host)}}'></div>
+              </td>
+              <td>
+                <div id='wdtsum-{{convertToPrefix(host)}}'></div>
+              </td>
+            </tr>
+          </table>
+          <script>registerStGraphs('st-tab', <%= JSON.dump(inventoryAnalyzer.hosts) %>, 'systemmem')</script>
+        </div>
+        <% end %>
+        <div class="tab-pane" id="net-tab">
+          <table class="graphGrid">
+            <tr ng-repeat="host in hosts">
+              <td style="width: 150px;">
+                 {{host}} <br>
+                 <a href="graphs.html?group=net&hostname={{host}}">Full graphs</a><br>
+              </td>
+              <td>
+                <div id='pnics-{{convertToPrefix(host)}}'></div>
+              </td>
+              <td>
+                <div id='tcp-{{convertToPrefix(host)}}'></div>
+             </td>
+            </tr>
+          </table>
+          <script>registerNetworkGraphs('net-tab', <%= JSON.dump(inventoryAnalyzer.hosts) %>, 'net')</script>
+        </div>
+
+        <% if $rvc_observer_enable_nfstab %>
+        <div class="tab-pane" id="nfs-tab">
+          <%
+            keyInfos = inventoryAnalyzer.nfsStats.keyInfos
+            hostnames = keyInfos.values.map{|x| x[:hostname]}.uniq
+          %>
+          <table class="graphGrid">
+            <% keyInfos.values.each do |mount| %>
+            <tr>
+              <td style="width: 150px;">
+                <%= mount[:hostname] %><br>
+              </td>
+              <%
+                mounts = [mount]
+                mounts.each do |mnt|
+                  group, file = inventoryAnalyzer.nfsStats.invFiles[mnt.values]
+                  divname = "#{group}-#{file}".gsub(".", "-")
+                  pp [group, file, divname]
+              %>
+              <td>
+                <%= mount[:mnt] %><br>
+                <div id='<%= divname %>'></div>
+                <script>
+                registerGraph(
+                  'nfs-tab',
+                  'jsonstats/<%= group %>/<%= file %>_thumb.json',
+                  computeGenericGraphSpecsThumb,
+                  "<%= divname %>",
+                  true
+                )
+                </script>
+              </td>
+              <% end %>
+            </tr>
+            <% end %>
+
+          </table>
+        </div>
+        <div class="tab-pane" id="vscsihost-tab">
+          <%
+            keyInfos = inventoryAnalyzer.vscsiHostStats.keyInfos
+            keyInfos = keyInfos.values.sort_by{|x| x[:hostname]}
+          %>
+          <table class="graphGrid">
+            <% keyInfos.each do |key| %>
+            <tr>
+              <td style="width: 150px;">
+                <%= key[:hostname] %><br>
+                <a href="graphs.html?group=vscsihost&hostname=<%= key[:hostname] %>">Full graphs</a><br>
+              </td>
+              <%
+              group, file = inventoryAnalyzer.vscsiHostStats.invFiles[key.values]
+              divname = "#{group}-#{file}".gsub(".", "-")
+              %>
+              <td>
+                <div id='<%= divname %>'></div>
+                <script>
+                registerGraph(
+                  'vscsihost-tab',
+                  'jsonstats/<%= group %>/<%= file %>_thumb.json',
+                  computeGenericGraphSpecsThumb,
+                  "<%= divname %>",
+                  true
+                )
+                </script>
+              </td>
+            </tr>
+            <% end %>
+          </table>
+        </div>
+        <div class="tab-pane" id="sum-tab">
+          <%
+            keyInfos = inventoryAnalyzer.vscsiHostStats.keyInfos
+            keyInfos = keyInfos.values.sort_by{|x| x[:hostname]}
+          %>
+          <table class="graphGrid">
+            <%
+              [
+                ['NFS', 'nfs', 'nfssum'],
+                ['VSCSI', 'misc', 'vscsisum'],
+                ['vSAN Client', 'dom', 'domclientsum'],
+                ['vSAN Owner', 'dom', 'domownersum'],
+                ['vSAN Disks', 'dom', 'domcompmgrsum'],
+                ['vSAN Owner (VM home)', 'dom', 'domvmhomesum'],
+                ['vSAN Owner (Disks)', 'dom', 'domvmdiskssum'],
+                ['LSOM Disks', 'lsom', 'lsomsum'],
+                ['Phys Disk (cache)', 'lsom', 'physdiskcachesum'],
+                ['Phys Disk (capacity)', 'lsom', 'physdiskcapacitysum'],
+                ['SSDs', 'lsom', 'ssdsum'],
+              ].each do |label, group, file|
+            %>
+            <tr>
+              <td style="width: 150px;">
+                <%= label %><br>
+                <a href="graphs.html?group=generic&json=<%= group %>%2F<%= file %>">Full graphs</a>
+              </td>
+              <%
+              divname = "#{group}-#{file}".gsub(".", "-")
+              %>
+              <td>
+                <div id='<%= divname %>'></div>
+                <script>
+                registerGraph(
+                  'sum-tab',
+                  'jsonstats/<%= group %>/<%= file %>_thumb.json',
+                  computeGenericGraphSpecsThumb,
+                  "<%= divname %>",
+                  true
+                )
+                </script>
+              </td>
+            </tr>
+            <% end %>
+          </table>
+        </div>
+        <% end %>
+        <div class="tab-pane" id="vsan-congestion-tab">
+          <%
+            keyInfos = inventoryAnalyzer.lsomCongestion.keyInfos
+            hostnames = keyInfos.values.map{|x| x[:hostname]}.uniq
+          %>
+          <table class="graphGrid">
+            <% keyInfos.values.group_by{|x| x[:hostname]}.sort_by do |h, info|
+                 h
+               end.each do |hname, devices|
+            %>
+            <tr>
+              <td style="width: 150px;">
+                <%= hname %><br>
+              </td>
+              <%
+                devices.each do |dev|
+                  group, file = inventoryAnalyzer.lsomCongestion.invFiles[dev.values]
+                  divname = "#{group}-#{file}".gsub(".", "-")
+              %>
+              <td>
+                <%= dev[:dev] %><br>
+                <a href="graphs.html?group=lsomcong&hostname=<%= hname %>&uuid=<%= dev[:dev] %>">Full graphs</a><br>
+                <div id='<%= divname %>'></div>
+                <script>
+                registerGraph(
+                  'vsan-congestion-tab',
+                  'jsonstats/<%= group %>/<%= file %>_thumb.json',
+                  computeGenericGraphSpecsThumb,
+                  "<%= divname %>",
+                  true
+                )
+                </script>
+              </td>
+              <% end %>
+            </tr>
+            <% end %>
+          </table>
+        </div>
+
+        <%
+          if !skipTasksTab
+        %>
+        <div class="tab-pane" id="clom-tab">
+          <h3 onclick='javascript: $("#clom-tab-help").toggle("fast")'>
+          <i class="icon-question-sign"></i> What am I looking at </h3>
+          <div class='tabhelp' id='clom-tab-help'>
+          <p>This view shows the fitness data that CLOM uses to select
+          disks for components.<p>
+          The information is shown here for the benefit
+          of VMware Support.
+          </p></div>
+          <table class="graphGrid">
+            <%
+              inventoryAnalyzer.fitnessStats.keys.sort.each do |hostname|
+                params = inventoryAnalyzer.fitnessStats[hostname].keys
+            %>
+            <tr>
+              <td style="width: 150px;">
+                <%= hostname %><br>
+                <a href="graphs.html?group=clom&host=<%= hostname %>&params=<%= params.join(',') %>">Full graphs</a><br>
+              </td>
+              <%
+                divname = "fitness-#{hostname}".gsub(".", "-")
+              %>
+              <td>
+                <div id='<%= divname %>'></div>
+                <script>
+                registerGraph(
+                  'clom-tab',
+                  'jsonstats/clom/fitness-<%= hostname %>_thumb.json',
+                  computeFitnessGraphSpecs,
+                  '<%= divname %>',
+                  true
+                )
+                </script>
+              </td>
+            </tr>
+            <% end %>
+          </table>
+        </div>
+        <%
+          end
+        %>
+
+        <div class="tab-pane" id="about-tab">
+          <h3><i class="icon-question-sign"></i> vSAN observer</h3>
+          <div class='tabhelp' id='about-tab-help' style="display: block">
+          <p>
+            vSAN observer is an experimental feature. It can be used to understand
+            vSAN performance characteristics and as such is a tool intended for
+            customers who desire deeper insight into vSAN as well as by VMware
+            Support to analyze performance issues encountered in the field.
+          </p>
+          </div>
+          <div>
+          <% if vcInfo && (! vcInfo.empty?) && hosts_props %>
+          <p>
+            <h5>System information:</h5>
+            <ul>
+              <li>VC host: <%= vcInfo['hostname'] %></li>
+              <li>VC build: <%= vcInfo['about']['fullName'] %></li>
+              <% hosts_props.each do |host, hostProps| %>
+              <li>ESX host: <%= hostProps['name'] %>
+                <ul>
+                  <li>Build:
+                    <%= hostProps['summary.config.product']['fullName'] %>
+                  </li>
+                  <li>CPU:
+                    <%= hostProps['summary.hardware']['cpuModel'].gsub(/\ +/, " ") %>
+                    (
+                      Packages: <%= hostProps['summary.hardware']['numCpuPkgs'] %>,
+                      Cores: <%= hostProps['summary.hardware']['numCpuCores'] %>
+                    )
+                  </li>
+                  <li>Memory:
+                    <%= hostProps['summary.hardware']['memorySize'] / 1000**3 %> GB
+                  </li>
+                  <li>Server vendor/model:
+                    <%= hostProps['summary.hardware']['vendor'] %>
+                    <%= hostProps['summary.hardware']['model'] %>
+                  </li>
+                  <% if hostProps['disks'] %>
+                  <li>vSAN Disks:
+                    <ul>
+                      <% hostProps['disks'].each do |disk| %>
+                      <li>
+                        <%= disk['ssd'] ? 'SSD' : 'HDD' %>:
+                        <%= disk['displayName'] %>
+                        <ul>
+                          <% if disk['vendor'] && disk['model'] %>
+                          <li><%= disk['vendor'].strip %> <%= disk['model'].strip %></li>
+                          <li><%= ((disk['size'] || 0) / 1000**3) %> GB</li>
+                          <% end %>
+                        </ul>
+                      </li>
+                      <% end %>
+                    </ul>
+                  </li>
+                  <% end %>
+                </ul>
+              </li>
+              <% end %>
+            </ul>
+          </p>
+          <% end %>
+          </div>
+        </div>
+
+        <div class="tab-pane" id="vsansparse-tab">
+          <h3 onclick='javascript: $("#vsansparse-help").toggle("fast")'>
+            <i class="icon-question-sign"></i> What am I looking at
+          </h3>
+          <div class='tabhelp' id='vsansparse-help'>
+            <p>Disclaimer: This view is primarly meant for VMware Support.
+               Users may or may not be able to spot problems in the shown values.
+            </p>
+            <p>This view shows information about vsanSparse. Information is
+            presented at a per host level and also at a per open vsanSparse disk.
+            If a disk is migrated between 2 hosts then it will have an entry
+            under each host. Each line shows information about that disk and
+            performance of the layer cache.
+            </p>
+          </div>
+          Search: <input ng-model="query">
+                <vsansparse-hosts>
+        </div>
+
+        <div class="tab-pane" id="cmmds-tab">
+          <h3 onclick='javascript: $("#cmmds-help").toggle("fast")'>
+            <i class="icon-question-sign"></i> What am I looking at
+          </h3>
+          <div class='tabhelp' id='cmmds-help'>
+            <p>Disclaimer: This view is primarly meant for VMware Support.
+               Users may or may not be able to spot problems in the shown values.
+            </p>
+            <p>Shows CMMDS stats.
+            </p>
+          </div>
+          <table class="graphGrid">
+            <%
+              inventoryAnalyzer.cmmdsStats.keys.sort.each do |hostname|
+            %>
+            <tr>
+              <td style="width: 150px;">
+                <%= hostname %><br>
+                <a href="graphs.html?group=cmmds&host=<%= hostname %>">Full graphs</a><br>
+              </td>
+              <%
+                divname = "cmmds-#{hostname}".gsub(".", "-")
+              %>
+              <td>
+                <div id='<%= divname %>'></div>
+                <script>
+                   registerGraph('cmmds-tab',
+                                 'jsonstats/cmmds/cmmds-vsi-<%= hostname %>_thumb.json',
+                                 computeCmmdsGraphSpecsThumb, '<%= divname %>', true)
+                </script>
+              </td>
+            </tr>
+            <% end %>
+          </table>
+        </div>
+
+        <div class="tab-pane" id="vm-tab"><div ng-if="showVmTab==true">
+          <h3 onclick='javascript: $("#vm-tab-help").toggle("fast")'>
+            <i class="icon-question-sign"></i> What am I looking at </h3>
+          <div class='tabhelp' id='vm-tab-help'>
+            <p>
+              This view allows a VM centric drill down, all the way down to
+              individual vSAN "components" stored on vSAN disk groups.
+            </p>
+            <p>
+              Every VM has a "VM home"
+              or "namespace directory", i.e. the directory in which its .vmx,
+              .log and other small files are stored. This view allows the user
+              to drill down on those VM Home directories, as well as on any
+              virtual disk the VM may have. While Virtual Disks are perceived
+              as a single IO device by VMs (see "VSCSI stats"), in case of linked
+              clones or VMs with snapshots a single virtual disk is actually
+              backed by multiple vSAN objects that can be inspected separately.
+              Any object other than the top most one is opened in read-only
+              mode, so should only see read IO. All writes go to the top-most
+              vSAN object.
+            </p>
+          </div>
+          Search: <input ng-model="query"> &nbsp;&nbsp;
+          <button class="btn" type="button" ng-click="toggleAllVms()">
+            Expand/Collapse all VMs
+          </button>
+          <br><br>
+          Total number of VMs: {{vmvallist.length}}<br>
+          Matching number of VMs: {{(vmvallist | filter:{name:query}).length }}<br>
+          <br>
+
+          <ul class="noBullets">
+              <li ng-repeat="vm in vmvallist | filter:{name:query}">
+                  <h4 class="clickable" ng-click="toggleVmShowDisks(vm)">
+                      <img class="vmIcon" src="vm-graph.svg"></img>{{vm.name}}
+                  </h4>
+                  <ul ng-if="vm.showdisks == 1">
+                      <li ng-repeat="(uuid, path) in vm.vsan_vm_home">
+                          <div class="header clickable" ng-class="{open: vm.show[uuid] == true}" ng-click="toggleShow(vm, uuid)">
+                              <i ng-hide="vm.show[uuid] == true" class="icon-caret-right"></i>
+                              <i ng-show="vm.show[uuid] == true" class="icon-caret-down"></i>
+                              {{path}}</div>
+                          <div ng-if="vm.show[uuid] == true">
+                            <div class="objectDetails">
+                              DOM Object UUID: {{uuid}}<br>
+                              <br>
+                              DOM owner:<br>
+                              <div dom-graph dom-graph-uuid="{{uuid}}"></div>
+                              <!--br>RAID tree:<br>
+                              <div raid-tree raid-tree-obj-uuid="{{uuid}}"></div-->
+                            </div>
+                            <br>
+                          </div>
+
+                          </li>
+                      <li ng-repeat="(vdiskid, disk) in vm.disks"><div virtual-disk virtual-disk-vm="vm" virtual-disk-id="{{vdiskid}}"></div></li>
+                  </ul>
+              </li>
+          </ul>
+
+          <br><br>
+        </div></div>
+        <% if !skipTasksTab %>
+        <div class="tab-pane active" id="tasks-tab">
+    <% if opts[:runName] != "" %>
+      Test Run: <%= opts[:runName] %><br>
+    <% end %>
+    <% if opts[:build] != "" %>
+      ESX Build: <%= opts[:build] %>
+    <% end %>
+    <br><br>
+    <% uptime = tasksAnalyzer.uptime %>
+    Uptime: <%= "%d:%02d:%02d" % [uptime / 3600, (uptime / 60) % 60, uptime % 60] %><br>
+    Updated <%= Time.now %><br>
+    <%= tasksAnalyzer.writeUptimeToFile %>
+    <%= graphUpdateMsg %><br>
+
+    <%=
+      table = TableEmitter.new("Tasks", "Total", "Success", "Failure", "Time(s)", "Details") do |table|
+        keys = tasksAnalyzer.taskTotal.keys
+        keys.sort_by do |k|
+           -1.0 * tasksAnalyzer.taskFailure[k] / tasksAnalyzer.taskTotal[k]
+        end.each do |k|
+          taskTime = "(no data)*"
+          taskDetails = ""
+          if tasksAnalyzer.taskStats[k].is_a?(Hash)
+             taskTime = tasksAnalyzer.taskStats[k][:success]
+             taskDetails = "<a href=\"#{tasksAnalyzer.taskStats[k][:success].histofile}\">H</a>, " +
+                           "<a href=\"#{tasksAnalyzer.taskStats[k][:success].scatterfile}\">S</a>"
+             tasksAnalyzer.taskStats[k][:success].close
+             tasksAnalyzer.taskStats[k][:failure].close
+          end
+
+          if tasksAnalyzer.taskFailure[k] > 0
+            taskDetails =  taskDetails + ", <a href=\"javascript:showfaults('faults-" + var(k) + "')\">E</a>"
+          end
+
+          row = [
+            k,
+            tasksAnalyzer.taskTotal[k],
+            tasksAnalyzer.taskSuccess[k],
+            tasksAnalyzer.taskFailure[k],
+            taskTime,
+            taskDetails
+          ]
+          table.row row
+        end
+      end
+      table.generate
+    %>
+
+    <br>
+
+    <div id="faults-all"><pre>
+All exceptions:
+    <% tasksAnalyzer.exceptionHisto.collect do |k,v|
+         [k,v]
+       end.sort_by do |p|
+         -p[1]
+       end.each do |key, value|
+    %>
+      [<%= value %>]<%= "\t" %><a href="traceViewer.html?chain=vim-exceptions&typ=<%=key%>"><%=key%></a>
+    <% end %>
+    </pre></div>
+    <% tasksAnalyzer.taskStats.each_key do |k| %>
+      <div id="faults-<%= var(k) %>" style="display:none;"><pre>
+Exceptions from <b><%= k %></b>:&nbsp;<a href="javascript:showfaults('faults-all')">show all exceptions</a>
+<% ((tasksAnalyzer.taskStats[k][:faults].collect{|k,v| [k,v]}).sort_by { |p| -p[1] }).each do |p| %>
+<%= "[#{p[1]}]\t<a href=\"traceViewer.html?chain=vim-exceptions&typ=#{p[0]}\">#{p[0]}</a>" %>
+<% end %>
+      </pre></div>
+    <% end %>
+
+        <div ng-init='tasks=<%= JSON.dump(tasksAnalyzer.allTasks) %>'>
+          <input type="checkbox" ng-model="showTasks"> Show tasks<br>
+          <input type="checkbox" ng-model="showOnlyFailures"> Show only failures<br>
+          <table class="graphgrid" style="text-align: left" ng-if="showTasks">
+          <tbody>
+            <tr ng-repeat="task in tasks | filter:resultFilter()" style="padding-bottom: 5px">
+              <td style="padding-right: 15px; " valign="top">{{task.op}}</td>
+              <td style="padding-right: 15px; " valign="top">{{task.result}}</td>
+              <td style="padding-right: 15px; " valign="top">{{task.id}}</td>
+              <td style="padding-right: 15px; " valign="top">{{task.startTime * 1000 | date:'short'}}</td>
+              <td style="padding-right: 15px; " valign="top">{{task.endTime * 1000 | date:'short'}}</td>
+              <td style="padding-right: 15px; " valign="top">
+                <button class='btn' type='button'
+                        ng-click='setTimeFilter(task.startTime, task.endTime);'>
+                  Set time filter
+                </button>
+              </td>
+            </tr>
+          </tbody>
+          </table>
+        </div>
+      </div>
+      <% end %>
+    </div>
+
+    <!--
+    <div class="container">
+    Stats for <%= testTitleString.gsub(' --', ', started on') %>.<br>
+    </div>
+    -->
+    <div>{{profilingTimes}}</div>
+    <div class="logo">
+      <img style="height: 17px" src="vmw_logo_white.png">
+    </div>
+</body>
+</html>

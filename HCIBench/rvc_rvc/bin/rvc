@@ -1,0 +1,197 @@
+#!/usr/bin/env ruby
+# Copyright (c) 2011 VMware, Inc.  All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+require 'rvc'
+require 'rvc/version'
+require 'rvc/screen_log'
+require 'rvc/uri_parser'
+require 'readline'
+require "highline/import"
+require 'pp'
+require 'shellwords'
+require 'yaml'
+require 'backports'
+require 'tempfile'
+require 'trollop'
+require 'rbvmomi/trollop'
+require 'time'
+
+Thread.abort_on_exception = true
+
+HighLine.use_color = ENV['TERM'] != nil
+
+$opts = Trollop.options do
+  version RVC::VERSION
+
+  banner <<-EOS
+Ruby vSphere Console.
+
+Usage:
+       rvc [options] [username[:password]@]hostname
+
+where [options] are:
+EOS
+
+  opt :path, "Initial directory", :short => :none, :default => ENV['RVC_PATH'], :type => :string
+  opt :create_directory, "Create the initial directory if it doesn't exist", :short => :none
+  opt :cmd, "command to evaluate", :short => 'c', :multi => true, :type => :string
+  opt :script, "file to execute", :short => 's', :type => :string
+  opt :script_args, "arguments to script", :short => :none, :default => "", :type => :string
+  opt :cookie, "authentication cookie file", :short => 'k', :type => :string
+  opt :quiet, "silence unnecessary output", :short => 'q', :default => false, :type => :boolean
+  opt :accept_unknown_host, "add unknown host into list of known hosts automatically", :default => false, :type => :boolean
+  opt :timeout, "timer to exit on no input", :short => :none, :default => 1800, :type => :int
+end
+
+$interactive = $opts[:script].nil? and $stdin.tty?
+
+# TODO remove $shell when all references are gone
+$shell = shell = RVC::Shell.new
+shell.reload_modules false
+
+# Prompt for hostname if none given. Useful on win32.
+if ARGV.empty? and $interactive
+  ARGV << Readline.readline("Host to connect to (user@host): ")
+end
+
+# TODO cookies, cert digests
+connections = 0
+ARGV.each do |str|
+  begin
+    uri = RVC::URIParser.parse str
+  rescue
+    puts "Failed to parse URI #{str.inspect}: #{$!.message}"
+    exit 1
+  end
+
+  begin
+    puts "Connecting to #{uri.host}..." if ARGV.size > 1
+    scheme = uri.scheme || 'vim'
+    scheme_handler = RVC::SCHEMES[scheme] or RVC::Util.err "invalid scheme #{scheme.inspect}"
+    scheme_handler[uri]
+    connections += 1
+  rescue RVC::Util::UserError, Exception
+    puts "Failed to connect to #{uri.host}: #{$!.message}"
+  end
+end
+
+if connections == 0
+  puts "No connections available."
+  exit 1
+end
+
+if $interactive
+  shell.completion.install
+  history_fn = "#{ENV['HOME']}/.rvc-history"
+  IO.foreach(history_fn) { |l| Readline::HISTORY << l.chomp } rescue puts "Welcome to RVC. Try the 'help' command."
+  begin
+    history = File.open(history_fn, 'a')
+  rescue Errno::EACCES
+    history = nil
+  end
+end
+
+if $interactive
+  $screen_log = RVC::ScreenLogger.new
+  def $stdout.write string
+    $screen_log.log(string)
+    super
+  end
+end
+
+if $opts[:path]
+  begin
+    shell.cmds.basic.cd shell.fs.lookup_single($opts[:path])
+  rescue RVC::Util::UserError
+    raise unless $opts[:create_directory]
+    parent_path = File.dirname($opts[:path])
+    shell.fs.lookup_single(parent_path).CreateFolder(:name => File.basename($opts[:path]))
+    shell.cmds.basic.cd shell.fs.lookup_single($opts[:path])
+  end
+elsif shell.connections.size == 1 and $interactive and
+      shell.connections.first[1].is_a? RbVmomi::VIM # HACK
+  conn_name, conn = shell.connections.first
+  if conn.serviceContent.about.apiType == 'VirtualCenter'
+    shell.cmds.basic.cd shell.fs.lookup_single(conn_name)
+  else
+    shell.cmds.basic.cd shell.fs.lookup_single("#{conn_name}/ha-datacenter/vm")
+  end
+end
+
+if defined? Ocra
+  require "net/https"
+  require "digest/sha2"
+  exit
+end
+
+if $interactive
+  if ENV['DISPLAY'] and !$opts[:quiet]
+    $stderr.puts "VMRC is not installed. You will be unable to view virtual machine consoles. Use the vmrc.install command to install it." unless shell.cmds.vmrc.slate.vmrc_installed?
+  end
+  $stderr.puts "Use the 'connect' command to connect to an ESX or VC server." if shell.connections.empty?
+  shell.cmds.basic.ls shell.fs.lookup_single('.') unless $opts[:quiet]
+end
+
+if Signal.list["CHLD"]
+  trap "SIGCHLD" do |sig|
+    begin
+      while pid = Process.wait(-1, Process::WNOHANG)
+      end
+    rescue Errno::ECHILD
+    end
+  end
+end
+
+if $opts[:script]
+  ARGV.replace(Shellwords.shellwords($opts[:script_args]))
+  shell.eval_ruby File.read($opts[:script]), $opts[:script]
+else
+  while true
+    begin
+      begin
+        input = nil
+        Timeout.timeout($opts[:timeout]) do
+          input = $opts[:cmd].shift || Readline.readline(shell.prompt, false) or break
+        end
+      rescue Timeout::Error
+        puts "\nExit program for no input in #{$opts[:timeout]} seconds"
+        break
+      rescue
+        puts "\n#{$!.class} during readline: #{$!.message}"
+        $!.backtrace.each { |x| puts x } if shell.debug
+        next
+      end
+      input = input.strip
+      next if input.empty?
+      (history && history.puts(input); Readline::HISTORY << input) unless input == Readline::HISTORY.to_a[-1]
+      $screen_log.log_input(input)
+      shell.eval_input input
+    rescue Interrupt
+      puts
+    end
+  end
+end
+
+shell.connections.each do |name, conn|
+  conn.close if conn.respond_to? :close rescue puts("failed to close connection #{name.inspect}: #{$!.class}: #{$!.message}")
+end
+if $interactive
+  $screen_log.disable
+end

@@ -1,0 +1,22 @@
+IMPORT_NAMESPACE network network
+IMPORT_NAMESPACE reflect esxcli
+IMPORT_NAMESPACE storage.core corestorage
+IMPORT_NAMESPACE storage.fcoe fcoe
+IMPORT_NAMESPACE storage.filesystem filesystem
+IMPORT_NAMESPACE storage.iscsi iscsi
+IMPORT_NAMESPACE storage.nmp nmp
+IMPORT_NAMESPACE storage.swiscsi swiscsi
+IMPORT_NAMESPACE system system
+IMPORT_NAMESPACE vm vms.vm
+
+IMPORT_CMD unixcompat.ping network.diagnose.ping
+IMPORT_CMD unixcompat.traceroute network.diagnose.traceroute
+IMPORT_CMD unixcompat.lspci hardware.pci.lspci
+
+IMPORT_CMD vib.list image.db.info
+IMPORT_CMD vib.info image.vib.info
+IMPORT_CMD vib.update image.vib.update
+IMPORT_CMD vib.installFromDepot image.depot.install
+IMPORT_CMD vib.updateFromDepot image.depot.update
+IMPORT_CMD vib.listInDepot image.depot.listvibs
+

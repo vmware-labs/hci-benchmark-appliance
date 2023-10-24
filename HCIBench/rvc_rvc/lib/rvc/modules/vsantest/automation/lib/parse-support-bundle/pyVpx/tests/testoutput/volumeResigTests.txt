@@ -1,0 +1,1164 @@
+===========================================================================
+Initial Cleanup
+
+===========================================================================
+Initial Inventory
+
+Disks:
+/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0                      1024 MB    0 partitions   
+/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0                      1024 MB    0 partitions   
+/vmfs/devices/disks/mpx.vmhba1:C0:T2:L0                      1024 MB    No partition info.
+/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0                      1024 MB    0 partitions   
+/vmfs/devices/disks/mpx.vmhba1:C0:T4:L0                      1024 MB    0 partitions   
+/vmfs/devices/disks/mpx.vmhba1:C0:T5:L0                      1024 MB    0 partitions   
+/vmfs/devices/disks/mpx.vmhba1:C0:T6:L0                      1024 MB    0 partitions   
+/vmfs/devices/disks/mpx.vmhba1:C0:T8:L0                      1024 MB    0 partitions   
+
+Non-blank disks:
+
+Blank disks:
+/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0                      1024 MB    0 partitions   
+/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0                      1024 MB    0 partitions   
+/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0                      1024 MB    0 partitions   
+/vmfs/devices/disks/mpx.vmhba1:C0:T4:L0                      1024 MB    0 partitions   
+/vmfs/devices/disks/mpx.vmhba1:C0:T5:L0                      1024 MB    0 partitions   
+/vmfs/devices/disks/mpx.vmhba1:C0:T6:L0                      1024 MB    0 partitions   
+/vmfs/devices/disks/mpx.vmhba1:C0:T8:L0                      1024 MB    0 partitions   
+
+VMFS volumes:
+
+Unresolved VMFS volumes:
+
+===========================================================================
+1. Test: Single Copy, Single Extent, Mounted Volume
+
+--> Creating VMFS Datastore 'SingleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+SingleExtent
+   mpx.vmhba1:C0:T0:L0:1
+-- Unresolved Volumes --
+VMFS label (UUID): SingleExtent (48edaf9c-1cb73d22-6026-000c297e861b) Size: 768
+   Resolvable: Yes
+   Incomplete Extents: No
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T1:L0:1 order: 0 (head) range 0 - 767
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edaf9c-1cb73d22-6026-000c297e861b/SingleExtent
+Can mount: No (the original volume is still online)
+Can resignature: Yes
+Extent name: mpx.vmhba1:C0:T1:L0:1	range: 0 - 767 (MB)
+
+-- Expected VMFS Volumes --
+SingleExtent
+   mpx.vmhba1:C0:T0:L0:?
+-- Expected Unresolved Volumes --
+VMFS label: SingleExtent
+   Resolvable: Yes
+   Incomplete Extents: No
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T1:L0:? order: 0
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Destroying VMFS Datastore 'SingleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+--> Rescanning VMFS volumes.
+===========================================================================
+2. Test: Single Copy, Multiple Extent, Mounted Volume
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T4:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:1
+   mpx.vmhba1:C0:T1:L0:1
+-- Unresolved Volumes --
+VMFS label (UUID): MultipleExtent (48edb028-7f0bdef3-07ec-000c297e861b) Size: 1536
+   Resolvable: Yes
+   Incomplete Extents: No
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T4:L0:1 order: 1 (not head) range 768 - 1535
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edb028-7f0bdef3-07ec-000c297e861b/MultipleExtent
+Can mount: No (the original volume is still online)
+Can resignature: Yes
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T4:L0:1	range: 768 - 1535 (MB)
+
+-- Expected VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:?
+   mpx.vmhba1:C0:T1:L0:?
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: Yes
+   Incomplete Extents: No
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 0
+      mpx.vmhba1:C0:T4:L0:? order: 1
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+--> Rescanning VMFS volumes.
+===========================================================================
+3. Test: Single Copy, Single Extent, Volume Not Mounted
+
+--> Creating VMFS Datastore 'SingleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+--> Destroying VMFS Datastore 'SingleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+-- Unresolved Volumes --
+VMFS label (UUID): SingleExtent (48edb0e4-a35c270e-0462-000c297e861b) Size: 768
+   Resolvable: Yes
+   Incomplete Extents: No
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T1:L0:1 order: 0 (head) range 0 - 767
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edb0e4-a35c270e-0462-000c297e861b/SingleExtent
+Can mount: Yes
+Can resignature: Yes
+Extent name: mpx.vmhba1:C0:T1:L0:1	range: 0 - 767 (MB)
+
+-- Expected VMFS Volumes --
+-- Expected Unresolved Volumes --
+VMFS label: SingleExtent
+   Resolvable: Yes
+   Incomplete Extents: No
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T1:L0:? order: 0
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Rescanning VMFS volumes.
+===========================================================================
+4. Test: Single Copy, Multiple Extent, Volume Not Mounted
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T4:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+-- Unresolved Volumes --
+VMFS label (UUID): MultipleExtent (48edb168-a42916d0-aea1-000c297e861b) Size: 1536
+   Resolvable: Yes
+   Incomplete Extents: No
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T4:L0:1 order: 1 (not head) range 768 - 1535
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edb168-a42916d0-aea1-000c297e861b/MultipleExtent
+Can mount: Yes
+Can resignature: Yes
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T4:L0:1	range: 768 - 1535 (MB)
+
+-- Expected VMFS Volumes --
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: Yes
+   Incomplete Extents: No
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 0
+      mpx.vmhba1:C0:T4:L0:? order: 1
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+--> Rescanning VMFS volumes.
+===========================================================================
+5. Test: Multiple Copy, Single Extent, Mounted Volume
+
+--> Creating VMFS Datastore 'SingleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+SingleExtent
+   mpx.vmhba1:C0:T0:L0:1
+-- Unresolved Volumes --
+VMFS label (UUID): SingleExtent (48edb238-0851fd42-c94a-000c297e861b) Size: 768
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T1:L0:1 order: 0 (head) range 0 - 767
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edb238-0851fd42-c94a-000c297e861b/SingleExtent
+Can mount: No (duplicate extents found)
+Can resignature: No (duplicate extents found)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T1:L0:1	range: 0 - 767 (MB)
+
+-- Expected VMFS Volumes --
+SingleExtent
+   mpx.vmhba1:C0:T0:L0:?
+-- Expected Unresolved Volumes --
+VMFS label: SingleExtent
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T1:L0:? order: 0
+      mpx.vmhba1:C0:T3:L0:? order: 0
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Destroying VMFS Datastore 'SingleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+--> Rescanning VMFS volumes.
+===========================================================================
+6. Test: Multiple Copy, Multiple Extent, Mounted Volume
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T4:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T5:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T5:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T6:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T6:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:1
+   mpx.vmhba1:C0:T1:L0:1
+-- Unresolved Volumes --
+VMFS label (UUID): MultipleExtent (48edb2bd-84585180-0d70-000c297e861b) Size: 1536
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T5:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T3:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T4:L0:1 order: 1 (not head) range 768 - 1535
+      mpx.vmhba1:C0:T6:L0:1 order: 1 (not head) range 768 - 1535
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edb2bd-84585180-0d70-000c297e861b/MultipleExtent
+Can mount: No (duplicate extents found)
+Can resignature: No (duplicate extents found)
+Extent name: mpx.vmhba1:C0:T5:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T4:L0:1	range: 768 - 1535 (MB)
+Extent name: mpx.vmhba1:C0:T6:L0:1	range: 768 - 1535 (MB)
+
+-- Expected VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:?
+   mpx.vmhba1:C0:T1:L0:?
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 0
+      mpx.vmhba1:C0:T4:L0:? order: 1
+      mpx.vmhba1:C0:T5:L0:? order: 0
+      mpx.vmhba1:C0:T6:L0:? order: 1
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T5:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T6:L0.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+--> Rescanning VMFS volumes.
+===========================================================================
+7. Test: Multiple Copy, Multiple Head Extent, Mounted Volume
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T4:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T5:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T5:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:1
+   mpx.vmhba1:C0:T1:L0:1
+-- Unresolved Volumes --
+VMFS label (UUID): MultipleExtent (48edb3bf-c2b66176-7b21-000c297e861b) Size: 1536
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T5:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T4:L0:1 order: 1 (not head) range 768 - 1535
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edb3bf-c2b66176-7b21-000c297e861b/MultipleExtent
+Can mount: No (duplicate extents found)
+Can resignature: No (duplicate extents found)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T5:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T4:L0:1	range: 768 - 1535 (MB)
+
+-- Expected VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:?
+   mpx.vmhba1:C0:T1:L0:?
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 0
+      mpx.vmhba1:C0:T4:L0:? order: 1
+      mpx.vmhba1:C0:T5:L0:? order: 0
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T5:L0.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+--> Rescanning VMFS volumes.
+===========================================================================
+8. Test: Multiple Copy, Multiple Tail Extent, Mounted Volume
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T4:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T5:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T5:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:1
+   mpx.vmhba1:C0:T1:L0:1
+-- Unresolved Volumes --
+VMFS label (UUID): MultipleExtent (48edb48c-bece3f0b-5d7a-000c297e861b) Size: 1536
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T5:L0:1 order: 1 (not head) range 768 - 1535
+      mpx.vmhba1:C0:T4:L0:1 order: 1 (not head) range 768 - 1535
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edb48c-bece3f0b-5d7a-000c297e861b/MultipleExtent
+Can mount: No (duplicate extents found)
+Can resignature: No (duplicate extents found)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T5:L0:1	range: 768 - 1535 (MB)
+Extent name: mpx.vmhba1:C0:T4:L0:1	range: 768 - 1535 (MB)
+
+-- Expected VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:?
+   mpx.vmhba1:C0:T1:L0:?
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 0
+      mpx.vmhba1:C0:T4:L0:? order: 1
+      mpx.vmhba1:C0:T5:L0:? order: 1
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T5:L0.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+--> Rescanning VMFS volumes.
+===========================================================================
+9. Test: Multiple Copy, Single Extent, Volume Not Mounted
+
+--> Creating VMFS Datastore 'SingleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+--> Destroying VMFS Datastore 'SingleExtent'.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+-- Unresolved Volumes --
+VMFS label (UUID): SingleExtent (48edb56e-679e14ed-a431-000c297e861b) Size: 768
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T1:L0:1 order: 0 (head) range 0 - 767
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edb56e-679e14ed-a431-000c297e861b/SingleExtent
+Can mount: No (duplicate extents found)
+Can resignature: No (duplicate extents found)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T1:L0:1	range: 0 - 767 (MB)
+
+-- Expected VMFS Volumes --
+-- Expected Unresolved Volumes --
+VMFS label: SingleExtent
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T1:L0:? order: 0
+      mpx.vmhba1:C0:T3:L0:? order: 0
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Rescanning VMFS volumes.
+===========================================================================
+10. Test: Multiple Copy, Multiple Extent, Volume Not Mounted
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T4:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T5:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T5:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T6:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T6:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+-- Unresolved Volumes --
+VMFS label (UUID): MultipleExtent (48edb5e1-5c1e1761-be7a-000c297e861b) Size: 1536
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T5:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T4:L0:1 order: 1 (not head) range 768 - 1535
+      mpx.vmhba1:C0:T6:L0:1 order: 1 (not head) range 768 - 1535
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edb5e1-5c1e1761-be7a-000c297e861b/MultipleExtent
+Can mount: No (duplicate extents found)
+Can resignature: No (duplicate extents found)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T5:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T4:L0:1	range: 768 - 1535 (MB)
+Extent name: mpx.vmhba1:C0:T6:L0:1	range: 768 - 1535 (MB)
+
+-- Expected VMFS Volumes --
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 0
+      mpx.vmhba1:C0:T4:L0:? order: 1
+      mpx.vmhba1:C0:T5:L0:? order: 0
+      mpx.vmhba1:C0:T6:L0:? order: 1
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T5:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T6:L0.
+--> Rescanning VMFS volumes.
+===========================================================================
+11. Test: Multiple Copy, Multiple Head Extent, Volume Not Mounted
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T4:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T5:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T5:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+-- Unresolved Volumes --
+VMFS label (UUID): MultipleExtent (48edb709-52a22642-1a5a-000c297e861b) Size: 1536
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T5:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T3:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T4:L0:1 order: 1 (not head) range 768 - 1535
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edb709-52a22642-1a5a-000c297e861b/MultipleExtent
+Can mount: No (duplicate extents found)
+Can resignature: No (duplicate extents found)
+Extent name: mpx.vmhba1:C0:T5:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T4:L0:1	range: 768 - 1535 (MB)
+
+-- Expected VMFS Volumes --
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 0
+      mpx.vmhba1:C0:T4:L0:? order: 1
+      mpx.vmhba1:C0:T5:L0:? order: 0
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T5:L0.
+--> Rescanning VMFS volumes.
+===========================================================================
+12. Test: Multiple Copy, Multiple Tail Extent, Volume Not Mounted
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T4:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T5:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T5:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+-- Unresolved Volumes --
+VMFS label (UUID): MultipleExtent (48edb7ce-a95bbb8f-d948-000c297e861b) Size: 1536
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T4:L0:1 order: 1 (not head) range 768 - 1535
+      mpx.vmhba1:C0:T5:L0:1 order: 1 (not head) range 768 - 1535
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edb7ce-a95bbb8f-d948-000c297e861b/MultipleExtent
+Can mount: No (duplicate extents found)
+Can resignature: No (duplicate extents found)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T4:L0:1	range: 768 - 1535 (MB)
+Extent name: mpx.vmhba1:C0:T5:L0:1	range: 768 - 1535 (MB)
+
+-- Expected VMFS Volumes --
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: No
+   Incomplete Extents: No
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 0
+      mpx.vmhba1:C0:T4:L0:? order: 1
+      mpx.vmhba1:C0:T5:L0:? order: 1
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T5:L0.
+--> Rescanning VMFS volumes.
+===========================================================================
+13. Test: Partial Copy, Head Extent, Multiple Extent, Mounted Volume
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:1
+   mpx.vmhba1:C0:T1:L0:1
+-- Unresolved Volumes --
+VMFS label (UUID): MultipleExtent (48edb8b6-c7420ade-6c5c-000c297e861b) Size: 1536
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 0 (head) range 0 - 767
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edb8b6-c7420ade-6c5c-000c297e861b/MultipleExtent
+Can mount: No (some extents missing)
+Can resignature: No (some extents missing)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 0 - 767 (MB)
+
+-- Expected VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:?
+   mpx.vmhba1:C0:T1:L0:?
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 0
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+--> Rescanning VMFS volumes.
+===========================================================================
+14. Test: Partial Copy, Tail Extent, Multiple Extent, Mounted Volume
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:1
+   mpx.vmhba1:C0:T1:L0:1
+-- Unresolved Volumes --
+VMFS label (UUID):  () Size: 1536
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 2 (not head) range 768 - 1535
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: n.a./n.a.
+Can mount: No (some extents missing)
+Can resignature: No (some extents missing)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 768 - 1535 (MB)
+
+-- Expected VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:?
+   mpx.vmhba1:C0:T1:L0:?
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 1
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+--> Rescanning VMFS volumes.
+===========================================================================
+15. Test: Partial Copy, Head Extent, Multiple Extent, Volume Not Mounted
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+-- Unresolved Volumes --
+VMFS label (UUID): MultipleExtent (48edb9d2-28c4f10e-90f0-000c297e861b) Size: 1536
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 0 (head) range 0 - 767
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edb9d2-28c4f10e-90f0-000c297e861b/MultipleExtent
+Can mount: No (some extents missing)
+Can resignature: No (some extents missing)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 0 - 767 (MB)
+
+-- Expected VMFS Volumes --
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 0
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Rescanning VMFS volumes.
+===========================================================================
+16. Test: Partial Copy, Tail Extent, Multiple Extent, Volume Not Mounted
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+-- Unresolved Volumes --
+VMFS label (UUID):  () Size: 1536
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 2 (not head) range 768 - 1535
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: n.a./n.a.
+Can mount: No (some extents missing)
+Can resignature: No (some extents missing)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 768 - 1535 (MB)
+
+-- Expected VMFS Volumes --
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: No
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 1
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Rescanning VMFS volumes.
+===========================================================================
+17. Test: Multiple Partial Copy, Head Extent, Multiple Extent, Volume Mounted
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T4:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:1
+   mpx.vmhba1:C0:T1:L0:1
+-- Unresolved Volumes --
+VMFS label (UUID): MultipleExtent (48edbae8-0459ab4f-79f0-000c297e861b) Size: 1536
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T4:L0:1 order: 0 (head) range 0 - 767
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edbae8-0459ab4f-79f0-000c297e861b/MultipleExtent
+Can mount: No (some extents missing)
+Can resignature: No (some extents missing)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T4:L0:1	range: 0 - 767 (MB)
+
+-- Expected VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:?
+   mpx.vmhba1:C0:T1:L0:?
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 0
+      mpx.vmhba1:C0:T4:L0:? order: 0
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+--> Rescanning VMFS volumes.
+===========================================================================
+18. Test: Multiple Partial Copy, Tail Extent, Multiple Extent, Volume Mounted
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T4:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:1
+   mpx.vmhba1:C0:T1:L0:1
+-- Unresolved Volumes --
+VMFS label (UUID):  () Size: 1536
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 2 (not head) range 768 - 1535
+      mpx.vmhba1:C0:T4:L0:1 order: 2 (not head) range 768 - 1535
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: n.a./n.a.
+Can mount: No (some extents missing)
+Can resignature: No (some extents missing)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 768 - 1535 (MB)
+Extent name: mpx.vmhba1:C0:T4:L0:1	range: 768 - 1535 (MB)
+
+-- Expected VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:?
+   mpx.vmhba1:C0:T1:L0:?
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 1
+      mpx.vmhba1:C0:T4:L0:? order: 1
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+--> Rescanning VMFS volumes.
+===========================================================================
+19. Test: Multiple Partial Copy, Head Extent, Multiple Extent, Volume Not Mounted
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T0:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T4:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+-- Unresolved Volumes --
+VMFS label (UUID): MultipleExtent (48edbc46-c28a6107-83da-000c297e861b) Size: 1536
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 0 (head) range 0 - 767
+      mpx.vmhba1:C0:T4:L0:1 order: 0 (head) range 0 - 767
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: 48edbc46-c28a6107-83da-000c297e861b/MultipleExtent
+Can mount: No (some extents missing)
+Can resignature: No (some extents missing)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 0 - 767 (MB)
+Extent name: mpx.vmhba1:C0:T4:L0:1	range: 0 - 767 (MB)
+
+-- Expected VMFS Volumes --
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 0
+      mpx.vmhba1:C0:T4:L0:? order: 0
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+--> Rescanning VMFS volumes.
+===========================================================================
+20. Test: Multiple Partial Copy, Tail Extent, Multiple Extent, Volume Not Mounted
+
+--> Creating VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T0:L0.
+--> Extending VMFS Datastore 'MultipleExtent' on disk /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0.
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T3:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Simulating creation of disk snapshot from /vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 to /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+$ ssh root@10.20.104.81 dd if=/vmfs/devices/disks/mpx.vmhba1:C0:T1:L0 of=/vmfs/devices/disks/mpx.vmhba1:C0:T4:L0 bs=1M count=1024 conv=notrunc
+1024+0 records in
+1024+0 records out
+--> Rescanning VMFS volumes.
+
+==== Phase: Verification ====
+
+-- VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:1
+   mpx.vmhba1:C0:T1:L0:1
+-- Unresolved Volumes --
+VMFS label (UUID):  () Size: 1536
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:1 order: 2 (not head) range 768 - 1535
+      mpx.vmhba1:C0:T4:L0:1 order: 2 (not head) range 768 - 1535
+-- esxcfg-volume -l Output --
+$ ssh root@10.20.104.81 esxcfg-volume -l
+VMFS3 UUID/label: n.a./n.a.
+Can mount: No (some extents missing)
+Can resignature: No (some extents missing)
+Extent name: mpx.vmhba1:C0:T3:L0:1	range: 768 - 1535 (MB)
+Extent name: mpx.vmhba1:C0:T4:L0:1	range: 768 - 1535 (MB)
+
+-- Expected VMFS Volumes --
+MultipleExtent
+   mpx.vmhba1:C0:T0:L0:?
+   mpx.vmhba1:C0:T1:L0:?
+-- Expected Unresolved Volumes --
+VMFS label: MultipleExtent
+   Resolvable: No
+   Incomplete Extents: Yes
+   Multiple Copies: Yes
+   Extents:
+      mpx.vmhba1:C0:T3:L0:? order: 1
+      mpx.vmhba1:C0:T4:L0:? order: 1
+====> Success
+
+==== Phase: Clean Up ====
+
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T3:L0.
+--> Clearing partitions on disk /vmfs/devices/disks/mpx.vmhba1:C0:T4:L0.
+--> Destroying VMFS Datastore 'MultipleExtent'.
+----> Failed to remove datastore.  Attempt 1/10.  Waiting for 10 seconds.
+--> Rescanning VMFS volumes.
+===========================================================================
+Test Results:
+1. Test: Single Copy, Single Extent, Mounted Volume ====> Success
+2. Test: Single Copy, Multiple Extent, Mounted Volume ====> Success
+3. Test: Single Copy, Single Extent, Volume Not Mounted ====> Success
+4. Test: Single Copy, Multiple Extent, Volume Not Mounted ====> Success
+5. Test: Multiple Copy, Single Extent, Mounted Volume ====> Success
+6. Test: Multiple Copy, Multiple Extent, Mounted Volume ====> Success
+7. Test: Multiple Copy, Multiple Head Extent, Mounted Volume ====> Success
+8. Test: Multiple Copy, Multiple Tail Extent, Mounted Volume ====> Success
+9. Test: Multiple Copy, Single Extent, Volume Not Mounted ====> Success
+10. Test: Multiple Copy, Multiple Extent, Volume Not Mounted ====> Success
+11. Test: Multiple Copy, Multiple Head Extent, Volume Not Mounted ====> Success
+12. Test: Multiple Copy, Multiple Tail Extent, Volume Not Mounted ====> Success
+13. Test: Partial Copy, Head Extent, Multiple Extent, Mounted Volume ====> Success
+14. Test: Partial Copy, Tail Extent, Multiple Extent, Mounted Volume ====> Success
+15. Test: Partial Copy, Head Extent, Multiple Extent, Volume Not Mounted ====> Success
+16. Test: Partial Copy, Tail Extent, Multiple Extent, Volume Not Mounted ====> Success
+17. Test: Multiple Partial Copy, Head Extent, Multiple Extent, Volume Mounted ====> Success
+18. Test: Multiple Partial Copy, Tail Extent, Multiple Extent, Volume Mounted ====> Success
+19. Test: Multiple Partial Copy, Head Extent, Multiple Extent, Volume Not Mounted ====> Success
+20. Test: Multiple Partial Copy, Tail Extent, Multiple Extent, Volume Not Mounted ====> Success

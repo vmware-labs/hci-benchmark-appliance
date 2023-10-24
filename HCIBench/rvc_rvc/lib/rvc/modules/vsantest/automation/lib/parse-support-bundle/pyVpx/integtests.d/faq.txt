@@ -1,0 +1,458 @@
+Host Agent Integration Test System -- Basic Documentation
+Project Sirius
+VMware Inc
+
+Key Terms --
+a) Integration Test Case -- A class that verifies a group of functions/subsystems
+                            (such as power up a Virtual Machine)
+b) Unit Test Case -- A class that verifies a single API/class Function
+                     in isolation. Should this function depend on another 
+                     function/class/API from the developed source base it
+                     should be stubbed out or use a mock up.
+c) Test Module - A directory containing one or more *.py files 
+                with unittest.TestCase derived classes
+d) Test Fixture - code that sets up a unit test case and cleans up after it
+
+
+0. How to run integration tests?
+  $ cd $VMTREE
+  $ make PRODUCT=Y OBJDIR=Z hostd
+  $ cd build/Z/Y/vim/hostd
+  $ vi integTests.xml (connection information especially)
+  $ ./integTests
+
+  Note: you can get cmd line help as follows:
+  $ ./integTests --help
+Usage
+=====
+  integDriver.py [options] integTests.xml
+
+options
+=======
+--help, -h                 show this help message and exit
+--dry-run, -n              Display what tests would be run
+--creds=CREDS, -cCREDS     Specify Login info, format=host:port:user:passwd
+--filter=FILTER, -fFILTER  Specify regex filter to apply to tests loaded
+                           from config file
+--debug, -d                step trace integDriver
+
+
+1. How to update/add new tests
+
+ To add to an existing Test Module
+   -> cd vim/py/integtests.d/X
+   -> create case_Y.py from vim/py/integtests.d/template.py 
+ 
+ To add a new Test Module
+   -> mkdir vim/py/integtests.d/Z
+   -> cd vim/py/integtests.d/Z
+   -> create a case_1.py, it generally will have
+      1. A test fixture class which handles setup/tear down
+
+      class FixtureNFC(unittest.TestCase):
+         def tearDown(self):
+         def setUp(self):
+   -> create the file __init__.py so integTests will know
+      to load and run any python files it finds in this directory
+        
+      2. A test class which can be as simple as:
+      class NfcTest(FixtureNFC):
+         def test1_DoNothing(self):
+            pass
+      3. Add new module directory to vim/xml/integTests.xml
+          <Z> 
+          <enabled> true </enabled>
+          </Z>
+  
+      4. place files into build directory
+         run $make PRODUCT=server|wgs hostd
+        this will transfer over the new files 
+
+      5. Verify your test module will be run;, 
+  ./integTests --dry-run ../../xml/integTests.xml
+  INFO: Tests selected to run are:
+    conn.case_1.VerifyHostdConnection
+       test1_Connect2HostdOverVMDBandSSL
+       test2_Connect2HostdOverVMDBnoSSL
+       test3_Connect2HostdOverSOAPandSSL
+       test4_Connect2HostdOverSOAPnoSSL
+    vmsvc.case_2.PowerUpSuspendedVM
+       test1_CheckattrZero
+    vmsvc.case_1.PowerUpSuspendedVM
+       test1_Check
+    vmsvc.case_1.PowerUpPoweredOffVM
+       test2_CheckOneThing
+       test3_CheckSomethingElse
+    vmsvc.case_2.VMAttrTests1
+       test1_CheckattrOne
+       test2_CheckattrTwo
+  INFO: Totals: TestCases: 5 Functions: 10
+  
+
+2. How to invoke all tests on my already started/existing hostd
+
+ From xterm prompt on system running hostd with standard root userid/password
+   -> $ export VMTREE=/path/to/tree
+   -> $ make PRODUCT=server [OBJDIR=y] hostd
+   -> $ cd $VMTREE/build/y/server/vim/test
+   -> $ ./integTests -b [integTests.xml]
+
+ From xterm prompt on system not running hostd with standard root userid/password
+   -> $ export VMTREE=/path/to/tree
+   -> $ make PRODUCT=server [OBJDIR=y] hostd
+   -> $ cd $VMTREE/build/y/server/vim/test
+   -> $ vi integTests.xml % uncomment out targetHost
+      or 
+   -> $ ./integTests --host=target [integTests.xml]       
+      or
+   -> $ VHOST=my-target
+      $ ./integTests [integTests.xml]      
+ 
+3. How to run a subset of tests without changing integTests.xml?
+   Use the --filter=regex-expression argument. For example
+
+     $ ./integTests --filter=conn\.case_1 --dry-run ../../xml/integTests.xml
+     INFO: Tests selected to run are:
+     conn.case_1.VerifyHostdConnection
+         test1_Connect2HostdOverVMDBandSSL
+         test2_Connect2HostdOverVMDBnoSSL
+         test3_Connect2HostdOverSOAPandSSL
+         test4_Connect2HostdOverSOAPnoSSL
+     INFO: Totals: TestCases: 1 Functions: 4
+
+    You can specify --filter more than once. You can filter on the following:
+    a) the directory name as found in integTests.xml (eg vmsvc)
+    b) the file name found in the above directory w/o the .py extension (eg case_1 for case_1.py)
+    c) the test class name found in the above file (eg PowerUpSuspendedVM)    
+
+    for example:  --filter=vmsvc\.file\.TestClass 
+   ./integTests --dry-run --filter=vmsvc\.case_1\.PowerUpSuspendedVM ../../xml/integTests.xml
+   INFO: Tests selected to run are:
+     vmsvc.case_1.PowerUpSuspendedVM
+        test1_Check
+  INFO: Totals: TestCases: 1 Functions: 1
+
+      
+4. How do I load test VMs without running integration tests?
+   Integration tests will check and install the test VM repository.
+   This operation takes a few seconds so far as the test VMs so far 
+   are quite small.
+   The vmrepo.py program provides the following functions for installing
+   the test VM repository on your system. It does not rely on hostd to
+   be running. 
+
+    $ ./vmrepo.py
+    vmi [options] where options are:
+        -l, --list    list Test VMs in repository
+        -s, --sync    sync Test VM repository to this machine
+        -c, --clean   clean out Test VMs on this machine
+        -d, --debug   start python pdb debugger
+
+   To see what VMs exist in the respository and compare to your system:
+   $ ./vmrepo.py --list
+   INFO: Registered VMs
+   VM: ID=39792 CFG=/vmfs/volumes/43e91c88-158b1bf8-4d1d-001321b18bf2/RHEL4/RHEL4.vmx
+
+   INFO: VM Repository contains these VMs
+   drwxr-xr-x        4096 2006/06/08 14:20:08 .
+   drwxr-xr-x        4096 2006/06/08 14:29:38 TTTVM1
+   ....
+
+  This example shows the current system doesn't have the tests intalled, so --sync
+  will load them.
+
+  The --sync, --clean options must be run as root 
+  and it will stop the "standard" hostd started with /etc/init.d/mgmt-vmware stop script
+  unless VMTREE is defined in which case it will run ./vmware-hostd via the new mgmt-hostd script
+  --sync will syncronize this directory on ESX servers:  /vmfs/volumes/storage1/testvms 
+  That means the existing file tree, if any, is updated to *exactly* match the repository.
+  It will then update vmInventory.xml with the new vmx file entries found. This by default
+  is /etc/vmware/hostd/vmInventory.xml
+  --sync is idempotent and quite efficient since it relies on rsync file transfer protocol
+  and is run before each integration test run.
+
+  --clean deletes the /vmfs/volumes/storage1/testvms and removes the related
+  entries from vmInventory.xml. It must be run as root.
+
+   [root@pioneer-122 bin]# ./vmrepo.py --clean
+   INFO: remvoing the directory and contents of /vmfs/volumes/storage1/testvms
+   ...
+  
+5. How to compare my results to nightly build for my branch?
+   @todo
+
+6. How to debug a failed test?
+   If the integration tests are run from a tty, upon either a programatic failure 
+   or test assert failure, the test will enter into 'pdb' debug mode (see Q14 about pdb)).
+
+   [root@pioneer-122 bin]# ./integTests --creds=localhost2:902:root:ca$h0w   ../../xml/integTests.xml
+   INFO: Using defaultHost=localhost2
+   INFO: Using defaultPort=902
+   INFO: Using defaultLogin=root
+   INFO: Using defaultPasswd=ca$hc0w
+   [2006-06-08 15:52:47.277 'App' 16384 info] Current working directory: /home/mrm/dali/vim/py/bin
+   test1_Connect2HostdOverVMDBandSSL (1st iteration) (conn.case_1.VerifyHostdConnection.test1_Connect2HostdOverVMDBandSSL) ... 
+   Debugging for error in test: None
+   > /home/mrm/dali/vim/py/integtests/conn/case_1.py(54)test1_Connect2HostdOverVMDBandSSL()
+   -> self.host, self.port)
+   (Pdb) where
+     /home/mrm/dali/vim/py/bin/integDriver.py(409)?()
+   -> main(sys.argv[1:])
+     /home/mrm/dali/vim/py/bin/integDriver.py(400)main()
+   -> LoadAndRunTests(opts)
+
+
+7. How to farm out my current build to another machine for overnight tests?
+  @todo
+
+8. What does the integration test system depend on? 
+   -> Access to an rsync repository of Virtual Machines used for testing
+      which is presently kept here:
+
+      $ rsync rsync://mrm-esx
+      testvm          VIM Host Agent Integration Suite
+
+   -> an updated bora-root tree visible via KROOT 
+   -> your build tree visiable via VMTREE
+      and optionally OBJDIR, PRODUCT
+
+9. Why isn't my test being run?
+  Check that you have defined a class that inherits from unitttest.TestCase
+  and has test methods that begin with 'test' 
+
+10. What should I do when I get __init__.py not found?
+   If you see this error:
+   ERROR: failed to load file: Test Module missing __init__.py
+   Then copy the file from another module directory. see item 1 in this list
+   for how to add a new integration test module
+
+11. How do I control the integration test harness?? 
+    Just change values in integTests.xml. If you do change it, be sure
+    to rename it and run it as
+        $ mv integTests yourConfig.xml
+    so subsequent make hostd won't potentially overwrite your seetings.
+
+12. I want to override just one value (host, port, login, password) on the
+    command line, how can I do that?
+
+    Just keep the correct number of colons (:) and fill in whatever values 
+    you want to change. For example:
+
+    To change just the password:
+      $ integTests --creds=:::psst
+    To change just the hostname:
+      $ integTests --creds=somehost.vmware.com:::
+
+    The test run will output some indication it is using these values:
+     $ ./integTests --dry-run --creds=192.0.2.1:-902::psst ../../xml/integTests.xml
+     INFO: Using VHOST=192.0.2.1
+     INFO: Using VPORT=-902
+     INFO: Using VPASSWD=psst
+     ....
+
+13. How do I use pdb debugger?
+       1) q to stop debugging and exit program
+
+       2) Stepping through program 
+          s -- step into
+          n -- step over
+          r -- run to end of this subroutine
+          c -- continue to next breakpoint or end of program
+          l -- list cmds args: first,last-lineno
+
+        (cmd to restart from the beginning!)
+        (cmd to view/change threads?
+
+       3) Invoking arbitrary code
+          !python cmd
+
+       4) Examinng symbols and stack
+          w -- show stack frame
+          u -- up
+          d -- down
+          a -- display arguments for this function
+          p -- print data object or(pp for pretty print)
+          p dict(i) -- display contents of instance i (data/functions)
+          p repr(x)  -- or str(x)
+          p locals()  -- display local dictionary
+          p globals() -- view global dictionary
+         (see section on introspection below)
+
+       5) breakpoints
+           b -- breakpoint args: filename:line function,condition
+           b -- no arg -- lists breakpoints
+           t -- (same as b, but one time)
+           cl -- clear bp args: n
+           enable/disable -- breakpoint args:n
+           ignore n count (ignore n times)
+
+   For emacs users, when tests are run from cmd window
+   the current  instruction is displayed in the a second window.
+
+14. What is the default ordering used when selecting a test to run?
+    The default is by module listed in the integTetss.xml, 
+    Next by lexical order of unittest.TestCase derived name, 
+    then by order of appearance of the test function itself.
+
+15. How do I fix testcase conn.case_1 (connection refused)
+    If you see the following, then either start the server on the specified machine,
+    or fix the host/port/user/password values using --cred or modify unitTests.xml
+
+     ./integTests ../../xml/integTests.xml 
+     test1_VerifyPortIsOpen (1st iteration) (conn.case_1.VerifyConnectionToHostd.test1_VerifyPortIsOpen) ... FAIL
+     [ PASSED (failIf) expr: "0" msg: "create tcp socket over IPv4" ]
+     [ FAILED (failIf) expr: "1" msg: "IPv4 connect to:127.0.0.1:902 failed, errno=111 Connection refused" ]
+   
+   ======================================================================
+   FAIL: test1_VerifyPortIsOpen (1st iteration) (conn.case_1.VerifyConnectionToHostd.test1_VerifyPortIsOpen)
+   ----------------------------------------------------------------------
+   Traceback (most recent call last):
+     File "/home/mrm/dali/vim/py/integtests/conn/case_1.py", line 64, in test1_VerifyPortIsOpen
+       self.failIf(cnx is not 0, "IPv4 connect to:" +
+     File "/home/mrm/dali/bora-root/python2.2/usr/lib/python2.2/site-packages/testoob/asserter.py", line 54, in _assert_reporting_func
+       method(*args, **kwargs)
+     File "/home/mrm/dali/bora-root/python2.2/usr/lib/python2.2/unittest.py", line 258, in failIf
+       if expr: raise self.failureException, msg
+   AssertionError: IPv4 connect to:127.0.0.1:902 failed, errno=111 Connection refused
+   
+   ----------------------------------------------------------------------
+   Ran 1 test in 0.022s
+   FAILED (failures=1)
+
+16. I'm trying to run a given test module, why do I get this message ?
+  $ ./integTests --dry-run --filter=vmsvc
+  No TestsCases found in TestSuite
+ or w/o --dry-run:
+  Ran 0 test in 0.010s
+  FAILED ()
+
+This indicates the unit test module, either doesn't exist or has been disabled.
+
+17. Get this error? how to fix it?
+
+/integTests --dry-run --filter=vmsvc
+[2006-06-19 12:12:16.330 'App' 16384 info] Current working directory: /home/mrm/dali/build/obj/server/vim/hostd
+/home/mrm/dali/bora-root/python2.2/usr/lib/python2.2/site-packages/testoob/collecting.py:109: UserWarning: No tests loaded for module 'vmsvc.case_1'
+  warnings.warn("No tests loaded for module '%s'" % module_name)
+No TestsCases found in TestSuite
+
+the unit test case had some syntax or config error. For example: cd to integtests/your-module && ../../py.sh case_*.py
+Traceback (most recent call last):
+  File "case_1.py", line 20, in ?
+    import vimhost
+ImportError: No module named vimhost
+
+instead of what you would expect to see (ie the man page for that integration test)    
+./../py.sh case_1.py
+[2006-06-19 12:16:21.459 'App' 16384 info] Current working directory: /home/mrm/dali/vim/py/integtests/vmsvc
+BEGIN -- INTEGRATION TEST DESCRIPTION
+
+Verify VM Power Up Operations
+
+   This module verifies the Integration Test Infrastructure
+   Basic VM Power On tests
+....
+
+18. How do I set a random breakpoint to debug a test?
+ Use these cmds in your source file:
+        import pdb
+        import signal
+        signal.alarm(0)
+        pdb.set_trace()
+  Otherwise the unit test may terminate due to the timeout
+  Alternately update integTests.xml to set timeout to a larger
+  length of time.
+
+
+19. What do I do when I get a 'Type Mismatch' error?
+ Example: Traceback (most recent call last):
+  File "/home/mrm/dali/vim/py/integtests/vmsvc/case_1.py", line 214, in test3_VerifyGuestVmOps
+    vm.CustomizeGuest(spec)
+  File "/home/mrm/dali/vim/py/pyVim/vm.py", line 241, in CustomizeGuest
+    rqt.Invoke()
+  File "/home/mrm/dali/vim/py/pyVim/vimutil.py", line 30, in Invoke
+    task = self._func(*self._args)
+  File "/home/mrm/dali/build/vmodl/pyVmomi/ServerObjects.py", line 1957, in Customize
+    return self._stub.Invoke(2, self, 'customize', args)
+TypeError: Type Mismatch
+
+  You've mispelled the datatype. The rule is Capital dot Capital.
+   so vim.vm.customization -> Vim.Vm.Customization
+
+  To create a Vim object:
+  spec = Vim.Vm.Customization.Specification()
+ 
+  which will be generated via this constructor:
+    class vim_DataObject(Any):
+ 81        _typeName = "vmodl.DataObject"
+ 82        _propertyTypes = {}
+ 83        def __init__(self):
+ 84  ->       self._properties = {}
+
+  and it doesn't check to see if it is correct or not.
+  so when you go to use it in an api call you get the above error.
+
+  One can verify if the right object was generated:
+ p dir(spec)
+['Array', 'GetDynamicProperty', 'GetDynamicType', 'GetEncryptionKey', 'GetGlobalIPSettings', 'GetIdentity', 'GetNicSettingMap', 'GetOptions', 'SetDynamicProperty', 'SetDynamicType', 'SetEncryptionKey', 'SetGlobalIPSettings', 'SetIdentity', 'SetNicSettingMap', 'SetOptions', '_GetProperty', '_GetType', '_SetProperty', '__doc__', '__init__', '__module__', '_properties', '_propertyTypes', '_typeName']
+(Pdb)
+
+20. How do I use python introspection and other things pythonic!
+  The short answer is dir(obj) to see what attributes re found in it
+  A more complete story found here:
+    http://www-128.ibm.com/developerworks/library/l-pyint.html
+  A Quick Reference
+    http://www.brunningonline.net/simon/python/quick-ref2_0.html
+  The python tutorial 
+    http://docs.python.org/tut/
+  The python grimoire
+    http://the.taoofmac.com/static/grimoire.html
+  The python library
+    http://docs.python.org/modindex.html
+  The python style guide
+    http://www.python.org/dev/peps/pep-0008/
+
+21. What version of python does one use?
+  The framework uses python 2.2. 
+
+
+22. Which test system should I use? vmacore unitTests or hostd integTests?
+
+If the tests should be run regardless of hostd, place them in unitTests.
+ 
+23. What to do when you get a TypeError exception on a vim method call?
+    When passing data to a peer it must first be converted from a python
+    datatype to a C++ Vmomi object, TypeMismatch error by pyVmacore.so module
+    The TypeError python exception will provide two pieces of information:
+    1) The python type to convert from
+    2) What the missing or incorect property was
+
+    For example: If this exception was caught:
+        TypeMismatchException converting python type: \
+           vim.vm.customization.Specification property=identity
+    then use http://vmweb.vmware.com/~jcho/vmodldoc/ to lookup what fields in
+    this Vim.Vm.Customization.Specification are mandatory and what type it is.
+
+24. What class name should one use Vmomi generated exception class types? 
+
+   An object of type: Vim.Fault.InvalidState
+   will be reported as:  pyVmomi.VmomiSupport.vim.fault.InvalidState
+
+   When coding, just drop the first two '.' delimted words and capitalize all
+   remaining words except the last when coding failUnlessRaises(exception, function, args) 
+
+25. How to fix this ERROR: execution failure: 'module' object has no attribute 'case_1'
+
+   This can occur if a test file imports a module that can't be loaded. unittests
+   routine loadTestsFromNames() doesn't pass up the ImportError exception so this
+   message occurs from the original failure.
+
+26. On win32 platform I get ERROR: no pyvmacore.dll error after make hostd, why?
+    On win32, make sure to build vim-lib-pyVmacore before running tests.
+
+27. what does python return for the expression: "str(item.__class__)"?
+    Depends on version of python interpreter. 2.2 returned "module.class"
+    2.3 and later return "<class 'module.class'>"
+
+#end of file
+

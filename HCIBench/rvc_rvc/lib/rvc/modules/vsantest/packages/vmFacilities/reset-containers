@@ -1,0 +1,32 @@
+#/bin/bash
+
+docker stop $(docker ps -aq)
+docker rm $(docker ps -aq)
+docker rmi $(docker images -q)
+docker image prune -f
+docker container prune -f
+
+  docker volume prune -f
+  docker network prune -f
+  docker system prune -f
+  docker system prune --volumes -f
+
+
+docker run -d --name graphite --restart=always -p 8020:80 -p 8021:8080 -p 2003-2004:2003-2004 -p 2023-2024:2023-2024 -p 8125:8125/udp -p 8126:8126 graphiteapp/graphite-statsd:1.1.5-10
+
+docker run --name influxdb --restart always -d -p 8086:8086 influxdb:1.8.1-alpine
+
+docker build --build-arg "GRAFANA_VERSION=8.3.11" --build-arg "GF_INSTALL_IMAGE_RENDERER_PLUGIN=true" -t grafana-render -f ~/tmp/Dockerfile .
+docker run --name grafana --restart always -d -p 3000:3000 -v /opt/automation/conf/grafana/provisioning:/etc/grafana/provisioning -v /opt/automation/conf/grafana/dashboards:/var/lib/grafana/dashboards -e GF_SECURITY_ADMIN_USER=admin -e GF_SECURITY_ADMIN_PASSWORD=vmware -e GF_AUTH_ANONYMOUS_ENABLED=true -u root grafana-render
+
+
+#docker run --name grafana --restart always -d -p 3000:3000 -v /opt/automation/conf/grafana/provisioning:/etc/grafana/provisioning -v /opt/automation/conf/grafana/dashboards:/var/lib/grafana/dashboards -e GF_SECURITY_ADMIN_USER=admin -e GF_SECURITY_ADMIN_PASSWORD=vmware -e GF_AUTH_ANONYMOUS_ENABLED=true -u root grafana/grafana:9.1.1  
+
+sleep 5
+
+for i in /opt/automation/conf/grafana/data_sources/*; do \
+    curl -X "POST" "http://localhost:3000/api/datasources" \
+    -H "Content-Type: application/json" \
+     --user admin:vmware \
+     --data-binary @$i
+done

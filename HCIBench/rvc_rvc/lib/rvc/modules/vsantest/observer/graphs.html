@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link href="observer.css" rel="stylesheet">
+
+  <script src="externallibs/js/jquery-1.9.1.min.js"></script>
+  <script src="externallibs/js/jquery-ui.min.js"></script>
+  <script src="externallibs/js/angular.min.js"></script>
+  <link href="externallibs/css/bootstrap-combined.no-icons.min.css" rel="stylesheet">
+  <link href="externallibs/css/font-awesome.css" rel="stylesheet">
+  <script src="externallibs/js/d3.min.js"></script>
+  <script src="graphs.js"></script>
+
+<style>
+
+body {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  margin: auto;
+  position: relative;
+  width: 1400px;
+}
+
+.graphs {
+  width: 1040px;
+}
+.health {
+    background-color: white;
+    font-size: 16px;
+    color: #555555;
+    font-family: OpenSans;
+    padding: 5px 5px 5px 5px;
+    font-weight: 200;
+}
+
+text {
+  font: 10px sans-serif;
+}
+
+.workflow-subsection h3 {
+    font-weight: 100;
+    font-size: 20px;
+    margin-bottom: 0px;
+    color:white;
+}
+
+.axis path, .axis line {
+  fill: none;
+  stroke: white;
+  shape-rendering: crispEdges;
+}
+.axis .tick.major text{
+    fill: white;
+    font-weight: 100;
+}
+.workflow-subsection{
+    margin: 15px 15px 20px 15px;
+}
+
+.mini-graph-container{
+    margin: 0px;
+    display:inline-block;
+}
+
+
+.graph{
+    font: 12px sans-serif;
+    background-color: rgba(0, 0, 0, 0.16);
+    width: 1020px;
+    height: 270px;
+}
+
+.graphmini{
+    font: 12px sans-serif;
+    background-color: rgba(0, 0, 0, 0.16);
+    width: 170px;
+    height: 120px;
+}
+
+
+.line {
+  fill: none;
+  stroke-width: 1.0px;
+}
+.line2 {
+  fill: none;
+  stroke: #006fa0;
+  stroke-width: 1.0px;
+}
+
+form {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+}
+
+</style>
+</head>
+<body id="body">
+
+<script>
+
+function loadGraphsCommon(group, filename, func, prefix, labelfunc) {
+    var query = jQuery.getJSON(
+        filename,
+        function(data){
+            var graphSpecs = func(data, "." + prefix.replace(/\./g, '-'))
+            renderGraphs(data, true, 1000, 250, graphSpecs)
+            $("#" + group + "-chartlabel").text(labelfunc(data))
+        }
+        )
+}
+
+function loadGraphs(group, filename, graphNames, func, labelfunc) {
+    var graphsDiv = d3.select("#body").append("div")
+        .attr("style", "display:inline-block;vertical-align:top;")
+        .attr("class", "graphs")
+    graphsDiv.append("div")
+        .attr("class", "workflow-subsection")
+        .append("h3")
+            .attr("id", group+"-chartlabel")
+            .text("")
+
+    for (var i in graphNames) {
+        graph = graphNames[i]
+        klass = group
+        if (graph != "") {
+            klass = group+"-"+graph
+        }
+
+        var graphDiv = graphsDiv.append("div")
+            .attr("class", "workflow-subsection")
+            .attr("style", "margin-top: 0px")
+            .append("div")
+                .attr("class", "graph "+klass)
+    }
+
+    loadGraphsCommon(group, filename, func, group, labelfunc)
+}
+
+
+function loadGraphsCommon2(graphsDiv, group, filename, func, prefix, labelfunc) {
+    var query = jQuery.getJSON(
+        filename,
+        function(data){
+            var graphSpecs = func(data, "." + prefix.replace(/\./g, '-'))
+            for (var i in graphSpecs) {
+                var graph = graphSpecs[i][1]
+                var klass = group
+                if (graph != "") {
+                    klass = group+"-"+graph
+                }
+
+                var graphDiv = graphsDiv.append("div")
+                    .attr("class", "workflow-subsection")
+                    .attr("style", "margin-top: 0px")
+                    .append("div")
+                        .attr("class", "graph "+klass)
+            }
+
+            renderGraphs(data, true, 1000, 250, graphSpecs)
+            $("#" + group + "-chartlabel").text(labelfunc(data))
+        }
+        )
+}
+
+function loadGraphs2(group, filename, func, labelfunc) {
+    var graphsDiv = d3.select("#body").append("div")
+        .attr("style", "display:inline-block;vertical-align:top;")
+        .attr("class", "graphs")
+    graphsDiv.append("div")
+        .attr("class", "workflow-subsection")
+        .append("h3")
+            .attr("id", group+"-chartlabel")
+            .text("")
+
+    loadGraphsCommon2(graphsDiv, group, filename, func, group, labelfunc)
+}
+
+group = getParameterByName("group")
+if (group == "") {
+    group = "dom"
+}
+filename = getParameterByName("json")
+
+if (group == "dom") {
+    var graphNames = ["latency", "iops", "tput", "cong", "oio", "latencySD"]
+    if (filename.indexOf("client") != -1) {
+        graphNames.push("domClientCacheHitRate");
+    }
+    loadGraphs(group, filename,
+        graphNames,
+        computeDomGraphSpecs,
+        function(data){ return "DOM object: " + data['uuid']}
+    )
+}
+if (group == "lsomhost") {
+    loadGraphs(group, filename,
+        ["latency", "iops", "tput", "rc", "rciops", "evictions", "rawar", "rc_plog_cb", "capacity"],
+        computeLsomHostGraphSpecs,
+        function(data){ return "LSOM host: " + data['hostname']}
+    )
+}
+if (group == "lsomcong") {
+    var hostname = getParameterByName("hostname")
+    var uuid = getParameterByName("uuid")
+    loadGraphs("congestion", "jsonstats/lsom/cong-"+hostname+"-"+uuid+".json",
+        ["congestion"
+        ],
+        computeGenericGraphSpecs,
+        function(data){
+            return "Congestion host: " + data['hostname'] + ", Disk: " + data['dev']
+        }
+    )
+}
+if (group == "ssd") {
+    var uuid = getParameterByName("uuid")
+    loadGraphs("wb", "jsonstats/lsom/ssd-"+uuid+".json",
+        ["wb"],
+        computeSSDGraphSpecs,
+        function(data){
+            return "SSD WB host: " + data['hostname'] + ", SSD: " + data['uuid']
+        }
+    )
+    loadGraphs("plog", "jsonstats/lsom/plog-"+uuid+".json",
+        ["ploglatency", "plogiops","plogreads","plogreadops",
+         "plogdata","plogelev","plogeleviops","ploglogs"],
+        computePlogGraphSpecs,
+        function(data){
+            return "PLOG host: " + data['hostname'] + ", SSD: " + data['dev']
+        }
+    )
+    loadGraphs("disk", "jsonstats/lsom/disk-"+uuid+".json",
+        ["disklatency", "diskiops"],
+        computeDiskGraphSpecs,
+        function(data){
+            return "LLOG host: " + data['hostname'] + ", SSD: " + data['dev']
+        }
+    )
+}
+if (group == "md") {
+    var uuid = getParameterByName("uuid")
+    loadGraphs("plog", "jsonstats/lsom/plog-"+uuid+".json",
+       ["ploglatency", "plogiops", "plogcapacity","plogreads",
+        "plogreadops","plogdata","plogelev","plogeleviops"],
+        computePlogGraphSpecs,
+        function(data){
+            return "PLOG host: " + data['hostname'] + ", MD: " + data['dev']
+        }
+    )
+    loadGraphs("disk", "jsonstats/lsom/virsto-"+uuid+".json",
+      ["mbcounters", "mbcache", "mf", "vi"],
+      computeVirstoGraphSpecs,
+      function(data){
+         return "Virsto host: " + data['hostname'] + ", MD: " + data['dev']
+      }
+   )
+   loadGraphs("cf", "jsonstats/lsom/CF-"+uuid+".json",
+      ["cfcomp", "cfext"],
+      computeCFGraphSpecs,
+      function(data){
+         return "CommitFlusher host: " + data['hostname'] + ", MD: " + data['dev']
+      }
+   )
+}
+if (group == "wdts") {
+    var hostname = getParameterByName("host")
+    var wdts = getParameterByName("wdts").split(",")
+    for (var i in wdts) {
+        wdt = wdts[i]
+        loadGraphs(group+wdt,
+            "jsonstats/pcpu/wdt-"+hostname+"-"+wdt+".json",
+            [''],
+            computeWdtGraphSpecs,
+            function(data){
+                return "WDT host: " + data['hostname'] + ", Worldet: " + data['wdt']
+            }
+        )
+    }
+}
+if (group == "helperworlds") {
+    var hostname = getParameterByName("host")
+    var helperworlds = getParameterByName("helperworlds").split(",")
+    for (var i in helperworlds) {
+        helperworld = helperworlds[i]
+        loadGraphs(group+helperworld,
+            "jsonstats/pcpu/helperworld-"+hostname+"-"+helperworld+".json",
+            ['helperworld'],
+            computeHelperWorldGraphSpecs,
+            function(data){
+                return "helperworld host: " + data['hostname'] + ", helperworld: " + data['helperworld']
+            }
+        )
+    }
+}
+if (group == "pcpu") {
+    var hostname = getParameterByName("host")
+    loadGraphs(group,
+        "jsonstats/pcpu/pcpu-"+hostname+".json",
+        ['pcpus'],
+        computePcpuGraphSpecs,
+        function(data){
+            return "PCPUs host: " + data['hostname']
+        }
+    )
+}
+if (group == "mem") {
+    var hostname = getParameterByName("host")
+    var slabs = getParameterByName("slabs").split(',')
+    var heaps = getParameterByName("heaps").split(',')
+    loadGraphs(group+"-slabs",
+        "jsonstats/mem/slabs-"+hostname+".json",
+        slabs,
+        computeMemGraphSpecs,
+        function(data){
+            return "Slabs host: " + data['hostname']
+        }
+    )
+    loadGraphs(group+"-heaps",
+        "jsonstats/mem/heaps-"+hostname+".json",
+        heaps,
+        computeMemGraphSpecs,
+        function(data){
+            return "Heaps host: " + data['hostname']
+        }
+    )
+}
+if (group == "clom") {
+    var hostname = getParameterByName("host")
+    var params = getParameterByName("params").split(',')
+    loadGraphs(group+"-fitness-stats",
+        "jsonstats/clom/fitness-"+hostname+".json",
+        params,
+        computeFitnessGraphSpecs,
+        function(data){
+            return "Fitness stats on host: " + data['hostname']
+        }
+    )
+}
+if (group == "cmmds") {
+    var hostname = getParameterByName("host")
+    loadGraphs(group+"-cmmds",
+        "jsonstats/cmmds/cmmds-vsi-"+hostname+".json",
+        ['mstatsCount', 'mstatsBytes', 'istatsCount', 'istatsBytes',
+         'qstats','wstats1', 'wstats2'],
+        computeCmmdsGraphSpecs,
+        function(data){
+            return "CMMDS stats on host: " + data['hostname']
+        }
+    )
+}
+if (group == "distribution") {
+    loadGraphs(group,
+        "jsonstats/misc/distribution.json",
+        ['lsom-components', 'lsom-iocomponents', 'dom-owners', 'dom-clients', 'dom-colocated'],
+        computeDistributionGraphSpecs,
+        function(data){
+            return "Distribution";
+        }
+    )
+}
+if (group == "cbrc") {
+    var hostname = getParameterByName("host")
+    loadGraphs(group,
+        "jsonstats/misc/cbrc-" + hostname + ".json",
+        ['hitrate', 'iops'],
+        computeCbrcGraphSpecs,
+        function(data){
+            return "CBRC on host: " + data['hostname'];
+        }
+    )
+}
+if (group == "physdisk") {
+    var hostname = getParameterByName("host")
+    var dev = getParameterByName("dev")
+    var md5 = getParameterByName("md5")
+    loadGraphs(group,
+        "jsonstats/lsom/physdisk-" + hostname + "-" + md5 + ".json",
+        ['iops', 'tput', 'latency'],
+        computePhysDiskGraphSpecs,
+        function(data){
+            return "Physical disk " + dev + " stats on host: " + data['hostname'];
+        }
+    )
+}
+if (group == "vscsi") {
+    var vm = getParameterByName("vm")
+    var disk = getParameterByName("disk")
+    loadGraphs(group,
+        "jsonstats/vm/vscsi-" + disk + "-" + vm + ".json",
+        ['iops', 'tput', 'latency'],
+        computeVscsiGraphSpecs,
+        function(data){
+            return "VSCSI of VM " + data['vm'] + ", disk: " + data['disk'];
+        }
+    )
+}
+if (group == "vscsihost") {
+    var hostname = getParameterByName("hostname")
+    loadGraphs(group,
+        "jsonstats/misc/vscsihost-" + hostname + ".json",
+        ['iops', 'tput', 'latency'],
+        computeVscsiGraphSpecs,
+        function(data){
+            return "VSCSI sum on host: " + data['hostname'];
+        }
+    )
+}
+
+if (group == "iopsamplification") {
+    var hostname = getParameterByName("hostname")
+    loadGraphs("vscsi",
+        "jsonstats/misc/vscsihost-" + hostname + ".json",
+        ['iops'],
+        computeVscsiGraphSpecs,
+        function(data){
+            return "VSCSI sum on host: " + data['hostname'];
+        }
+    )
+    loadGraphs("dom",
+        "jsonstats/dom/domobj-client-" + hostname + ".json",
+        ['iops'],
+        computeDomGraphSpecs,
+        function(data){
+            return "DOM client on host: " + hostname;
+        }
+    )
+    loadGraphs("ioamp",
+        "jsonstats/misc/ioamp-" + hostname + ".json",
+        ['iops'],
+        computeIoAmpGraphSpecs,
+        function(data){
+            return "IO amplification from VSCSI to DOM client on host: " + hostname;
+        }
+    )
+}
+
+if (group == "vsansparse") {
+    var hostname = getParameterByName("host")
+    var uuid = getParameterByName("uuid")
+    var filepath = getParameterByName("path")
+    var graphTypes = ['iocounts', 'iobytes', 'iolatency', 'cache', 'cachehits', 'locks', 'layer']
+    if (uuid) {
+       loadGraphs("vsansparse", "jsonstats/vsansparse/vsansparse-" + hostname + "-" + uuid + ".json",
+          graphTypes,
+          computeVsansparseGraphSpecs,
+          function(data) {
+          return "Vsansparse " + hostname + " " + filepath + " (Dom Obj: " + uuid +")";
+          }
+       )
+    } else {
+       loadGraphs("vsansparse", "jsonstats/vsansparse/vsansparse-" + hostname + ".json",
+          graphTypes,
+          computeVsansparseGraphSpecs,
+          function(data) {
+            return "Vsansparse on " + hostname;
+          }
+       )
+    }
+}
+
+if (group == "net") {
+    var hostname = getParameterByName("hostname")
+    loadGraphs("vmknic",
+        "jsonstats/misc/vmknic-" + hostname + ".json",
+        ['vmktput', 'vmkerrs'],
+        computeTcpGraphSpecs,
+        function(data){
+          return "vmknic graphs for " + hostname;
+        }
+    )
+    loadGraphs("pnic",
+        "jsonstats/misc/pnics-" + hostname + ".json",
+        ['pnictput', 'pnicerrs'],
+        computePnicsGraphSpecs,
+        function(data){
+          return "pnic graphs for " + hostname;
+        }
+    )
+}
+if (group == "generic") {
+    loadGraphs2("generic",
+        "jsonstats/" + filename + ".json",
+        computeGenericGraphSpecsThumb,
+        function(data){
+            return "Graphs: " + filename;
+        }
+    )
+}
+</script>
+</body>
+</html>
