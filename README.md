@@ -20,13 +20,12 @@ HCIBench can assign static IP address. To accomplish this, the HCIBench source n
 You can choose to deploy HCIBench appliance OVA to vSphere environment if there's no existing HCIBench instance running in your environment 
 ### Deploy
 
-1. Step 1
-2. Step 2
-3. Step 3
-
-You can choose to upgrade HCIBench with the latest code if there is existing HCIBench instance running in your environment 
+1. Download HCIBench OVA from https://github.com/vsphere-tmm/HCIBench/releases
+2. Deploy HCIBench OVA into your vSphere environment. Refer to [HCIBench User Guide](HCIBench_User_Guide_2.8.1.pdf) for more details
+3. Configure the HCIBench testing and start testing
 
 ### Upgrade
+You can choose to upgrade HCIBench with the latest code if there is existing HCIBench instance running in your environment 
 
 #### Prerequisites
 *  You need to have HCIBench Controller VM running
