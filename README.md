@@ -17,11 +17,29 @@ HCIBench is not only a benchmark tool designed for vSAN, but also could be used 
 HCIBench can assign static IP address. To accomplish this, the HCIBench source network “VM Network” must be mapped to the same network as the guest VM (Fig. 2)
 •   The vSphere environment where the tool is deployed can access the vSAN Cluster environment to be tested
 
-### Build & Run
+You can choose to deploy HCIBench appliance OVA to vSphere environment if there's no existing HCIBench instance running in your environment 
+### Deploy
 
 1. Step 1
 2. Step 2
 3. Step 3
+
+You can choose to upgrade HCIBench with the latest code if there is existing HCIBench instance running in your environment 
+
+### Upgrade
+
+## Prerequisites
+*  You need to have HCIBench Controller VM running
+*  Your HCIBench VM should have internet connectivity
+
+## Steps
+1. SSH into your HCIBench VM and run the following cmds to upgrade your HCIBench to the latest build
+2. tdnf install -y git && git clone https://github.com/vmware-labs/hci-benchmark-appliance.git && sh hci-benchmark-applianc/HCIBench/upgrade.sh
+
+or you can get the zip file
+cd /root/ && wget https://github.com/vmware-labs/hci-benchmark-appliance/archive/refs/heads/main.zip && unzip master && sh /root/HCIBench-master/HCIBench/upgrade.sh
+
+Then the logs, results and configuration files will be preserved after upgrading to the latest build.
 
 ## Documentation
 
