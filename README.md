@@ -42,6 +42,7 @@ cd /root/ && wget https://github.com/vmware-labs/hci-benchmark-appliance/archive
 Then the logs, results and configuration files will be preserved after upgrading to the latest build.
 
 ## Documentation
+[HCIBench User Guide](HCIBench_User_Guide_2.8.1.pdf)
 
 ## Contributing
 
