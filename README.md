@@ -1,6 +1,9 @@
-# hci-benchmark-appliance
+# HCIBench
 
 ## Overview
+HCIBench stands for "Hyper-converged Infrastructure Benchmark". It's essentially an automation wrapper around the popular and proven open source benchmark tools: Vdbench and Fio that make it easier to automate testing across a HCI cluster. HCIBench aims to simplify and accelerate customer POC performance testing in a consistent and controlled way. The tool fully automates the end-to-end process of deploying test VMs, coordinating workload runs, aggregating test results, performance analysis and collecting necessary data for troubleshooting purposes.
+
+HCIBench is not only a benchmark tool designed for vSAN, but also could be used to evaluate the performance of all kinds of Hyper-Converged Infrastructure Storage in vSphere environment.
 
 ## Try it out
 
