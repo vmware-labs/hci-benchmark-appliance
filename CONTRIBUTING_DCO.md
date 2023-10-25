@@ -72,5 +72,3 @@ The best way to reach us with a question when contributing is to ask on:
 
 ## Additional Resources
 
-_Optional_
-
