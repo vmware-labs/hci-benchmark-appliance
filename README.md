@@ -49,7 +49,7 @@ Then the logs, results and configuration files will be preserved after upgrading
 The hci-benchmark-appliance project team welcomes contributions from the community. Before you start working with hci-benchmark-appliance, please
 read our [Developer Certificate of Origin](https://cla.vmware.com/dco). All contributions to this repository must be
 signed as described on that page. Your signature certifies that you wrote the patch or have the right to pass it on
-as an open-source patch. For more detailed information, refer to [CONTRIBUTING.md](CONTRIBUTING.md).
+as an open-source patch. For more detailed information, refer to [CONTRIBUTING.md](CONTRIBUTING_DCO.md).
 
 ## License
 
