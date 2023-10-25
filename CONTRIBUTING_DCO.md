@@ -30,7 +30,7 @@ We welcome many different types of contributions and not all of them need a Pull
 
 * Getting familiar with the code
   1. Look at the [upgrade.sh](https://github.com/vmware-labs/hci-benchmark-appliance/blob/main/HCIBench/upgrade.sh) to know how the code is deployed into HCIBench
-  2. Mosts HCIbench functions are wrapped within this [lib folder](https://github.com/vmware-labs/hci-benchmark-appliance/tree/main/HCIBench/rvc_rvc/lib/rvc/modules/vsantest/automation/lib)
+  2. Mosts HCIBench functions are wrapped within this [lib folder](https://github.com/vmware-labs/hci-benchmark-appliance/tree/main/HCIBench/rvc_rvc/lib/rvc/modules/vsantest/automation/lib)
  
 * Test your code
   after you contribute some changes to the code, put the code into HCIBench VM running in your environment and run a HCIBench test to validate your change.
