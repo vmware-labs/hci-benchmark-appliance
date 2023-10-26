@@ -6,6 +6,7 @@ HCIBench stands for "Hyper-converged Infrastructure Benchmark". It's essentially
 HCIBench is not only a benchmark tool designed for vSAN, but also could be used to evaluate the performance of all kinds of Hyper-Converged Infrastructure Storage in vSphere environment.
 
 ## Try it out
+[HCIBench 2.8.2](https://github.com/vmware-labs/hci-benchmark-appliance/releases/download/2.8.2/HCIBench_2.8.2.ova)
 
 ### Prerequisites
 
