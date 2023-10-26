@@ -21,7 +21,7 @@ HCIBench can assign static IP address.
 
 You can choose to deploy HCIBench appliance OVA to vSphere environment if there's no existing HCIBench instance running in your environment 
 
-1. Download HCIBench OVA from https://github.com/vsphere-tmm/HCIBench/releases
+1. Download HCIBench OVA from [https://github.com/vsphere-tmm/HCIBench/releases](https://github.com/vmware-labs/hci-benchmark-appliance/releases)
 2. Deploy HCIBench OVA into your vSphere environment. Refer to [HCIBench User Guide](HCIBench_User_Guide_2.8.1.pdf) for more details
 3. Configure the HCIBench testing and start testing
 
@@ -37,7 +37,7 @@ You can choose to upgrade HCIBench with the latest code if there is existing HCI
 2. tdnf install -y git && git clone https://github.com/vmware-labs/hci-benchmark-appliance.git && sh hci-benchmark-applianc/HCIBench/upgrade.sh
 
 or you can get the zip file
-cd /root/ && wget https://github.com/vmware-labs/hci-benchmark-appliance/archive/refs/heads/main.zip && unzip master && sh /root/HCIBench-master/HCIBench/upgrade.sh
+cd /root/ && wget https://github.com/vmware-labs/hci-benchmark-appliance/archive/refs/heads/main.zip && unzip main && sh hci-benchmark-appliance-main/HCIBench/upgrade.sh
 
 Then the logs, results and configuration files will be preserved after upgrading to the latest build.
 
