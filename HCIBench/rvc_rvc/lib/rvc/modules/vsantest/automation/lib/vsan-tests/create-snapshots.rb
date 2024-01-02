@@ -1,6 +1,6 @@
 #!/usr/bin/ruby
-require_relative "rvc-util.rb"
-require_relative "util.rb"
+require_relative "/opt/automation/lib/rvc-util.rb"
+require_relative "/opt/automation/lib/util.rb"
 vms = []
 snapshots = ARGV[0].to_i
 waittime = ARGV[1].to_i
