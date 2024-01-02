@@ -1,6 +1,6 @@
 #!/usr/bin/ruby
-require_relative "rvc-util.rb"
-require_relative "util.rb"
+require_relative "/opt/automation/lib/rvc-util.rb"
+require_relative "/opt/automation/lib/util.rb"
 vms = []
 
 @folder_path_escape = _get_folder_path_escape[0]
