@@ -34,6 +34,7 @@ end_time = ARGV[2] || File.mtime("#{ARGV[0]}-res.txt").to_i
 @cmd_delete_manifest = "rm -f /etc/vmware/vm-support/vsan-perfsvc-stats-hcibench.mfx"
 @cmd_delete_vsan_perfsvc_status_script = "rm -f /tmp/vsan-perfsvc-status.py"
 @determine_vsphere_version = "vmware -v | awk '{print $3}' | cut -d '.' -f1"
+@determins_vsan_sub_version = "python -c 'import vsanPerfPyMo, VsanHealthUtil; print(\"2\" if (\"IsVsanMaxEnabledInHost\" in dir(VsanHealthUtil)) else \"2U3\")'"
 
 def run_cmd(host)
   `sed -i '/#{host} /d' /root/.ssh/known_hosts`
@@ -46,7 +47,8 @@ def run_cmd(host)
     vs_ver = ssh_cmd_with_return(host,host_username,host_password,@determine_vsphere_version).to_i
     puts "vSphere version: #{vs_ver}",@collect_support_bundle_log
     if vs_ver > 7
-      @vsan_perfsvc_status_script = "/opt/automation/lib/perf-svc-vsan2/vsan-perfsvc-status.py"
+      vsan_sub_ver = ssh_cmd_with_return(host,host_username,host_password,@determins_vsan_sub_version)
+      @vsan_perfsvc_status_script = "/opt/automation/lib/perf-svc-vsan#{vsan_sub_ver}/vsan-perfsvc-status.py"
     end
 
     puts "Uploading VM Support manifest to #{host}",@collect_support_bundle_log
