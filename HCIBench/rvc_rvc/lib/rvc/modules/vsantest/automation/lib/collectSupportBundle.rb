@@ -47,7 +47,7 @@ def run_cmd(host)
     vs_ver = ssh_cmd_with_return(host,host_username,host_password,@determine_vsphere_version).to_i
     puts "vSphere version: #{vs_ver}",@collect_support_bundle_log
     if vs_ver > 7
-      vsan_sub_ver = ssh_cmd_with_return(host,host_username,host_password,@determins_vsan_sub_version)
+      vsan_sub_ver = ssh_cmd_with_return(host,host_username,host_password,@determins_vsan_sub_version).chomp
       @vsan_perfsvc_status_script = "/opt/automation/lib/perf-svc-vsan#{vsan_sub_ver}/vsan-perfsvc-status.py"
     end
 

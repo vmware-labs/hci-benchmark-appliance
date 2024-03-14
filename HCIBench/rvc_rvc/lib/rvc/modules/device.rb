@@ -239,6 +239,7 @@ SCSI_CONTROLLER_TYPES = {
   'buslogic' => VIM::VirtualBusLogicController,
   'lsilogic' => VIM::VirtualLsiLogicController,
   'lsilogic-sas' => VIM::VirtualLsiLogicSASController,
+  'nvme' => VIM::VirtualNVMEController
 }
 
 SCSI_BUS_NUMBERS = [0, 1, 2, 3]
@@ -256,20 +257,28 @@ def add_scsi_controller vm, opts
   err "invalid value for --sharing" unless VIM::VirtualSCSISharing.values.member? opts[:sharing]
 
   existing_devices, = vm.collect 'config.hardware.device'
-  used_bus_numbers = existing_devices.grep(VIM::VirtualSCSIController).map(&:busNumber)
+  if klass == VIM::VirtualNVMEController
+    used_bus_numbers = existing_devices.grep(klass).map(&:busNumber)
+  else
+    used_bus_numbers = existing_devices.grep(VIM::VirtualSCSIController).map(&:busNumber)
+  end
   bus_number = (SCSI_BUS_NUMBERS - used_bus_numbers).min
   err "unable to allocate a bus number, too many SCSI controllers" unless bus_number
-
-  controller = klass.new(
-    :key => -1,
-    :busNumber => bus_number,
-    :sharedBus => opts[:sharing],
-    :hotAddRemove => opts[:hot_add]
-  )
-
+  if klass == VIM::VirtualNVMEController
+    controller = klass.new(
+      :key => -1,
+      :busNumber => bus_number
+    )
+  else
+    controller = klass.new(
+      :key => -1,
+      :busNumber => bus_number,
+      :sharedBus => opts[:sharing],
+      :hotAddRemove => opts[:hot_add]
+    )
+  end
   _add_device vm, nil, controller
 end
-
 
 opts :add_serial do
   summary "Add a virtual serial port to a VM"
