@@ -122,12 +122,6 @@ else
         end
       end
       puts "Resource Usage:", resfile
-      #cpu_usage = _get_cpu_usage(startTime).chomp
-      #ram_usage = _get_ram_usage(startTime).chomp
-      vsan_pcpu_usage = _get_vsan_cpu_usage(dir).chomp
-      #puts "CPU USAGE\t= #{cpu_usage}", resfile
-      #puts "RAM USAGE\t= #{ram_usage}", resfile
-      puts "vSAN PCPU USAGE\t= #{vsan_pcpu_usage.to_s}", resfile if vsan_pcpu_usage != ""
       puts res_usage, resfile
       hcibench_version = `cat /etc/hcibench_version`.chomp
       `cd "#{dir}"; cp -r #{$log_path} "#{dir}"/; tar zcfP HCIBench-#{hcibench_version}-logs.tar.gz -C logs .; rm -rf logs`

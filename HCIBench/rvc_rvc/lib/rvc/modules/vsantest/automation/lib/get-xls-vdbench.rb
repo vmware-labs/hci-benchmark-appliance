@@ -49,7 +49,7 @@ else
             end
             row_num = 0
             subfolders.sort.each_with_index do |testcase,index|
-                if Dir.glob("#{testcase}/iotest-vdbench-[0-9]*vm").size == 1
+                if Dir.glob("#{testcase}/*.txt").size >= 1
                     @empty = false
                     results_files = Dir["#{testcase}/*.txt"]
                     files_map = {}

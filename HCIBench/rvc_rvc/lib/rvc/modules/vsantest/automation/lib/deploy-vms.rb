@@ -11,6 +11,7 @@ _get_cl_path
 @disk_size_var = "--datadisk-size-gb #{$size_data_disk} "
 @disk_num_var = "--datadisk-num #{$number_data_disk} "
 @network_var = %{--network "#{$network_name}" }
+@ctrlr_type = "pvscsi"
 
 network_name_gsub = $network_name.gsub('"', '\"')
 @get_network_instance_escape = Shellwords.escape(%{vsantest.perf.get_network_instance_by_name . "#{network_name_gsub}"})
@@ -54,11 +55,11 @@ def deployOnHost(datastore, vm_num, batch, ips, hosts)
     deploy_action_escape = Shellwords.escape(%{vsantest.perf.deploy_test_vms . --resource-pool #{$resource_pool_name_escape} \
       --vm-folder #{$vm_folder_name} --datastore "#{ds_path_gsub}" --network ~dest_network #{@disk_size_var} #{@disk_num_var} \
       --num-vms #{vm_num} --num-cpu #{$num_cpu} --size-ram #{$size_ram} --name-prefix "#{prefix}" #{host_rvc} --static #{ip_rvc} --ip-size #{$static_ip_size} \
-      --storage-policy "#{storage_policy}" --tool "#{$tool}" #{multiwriter_param}})
+      --storage-policy "#{storage_policy}" --tool "#{$tool}" #{multiwriter_param} --ctrlr-type #{@ctrlr_type}})
   else
     deploy_action_escape = Shellwords.escape(%{vsantest.perf.deploy_test_vms . --resource-pool #{$resource_pool_name_escape} \
      --vm-folder #{$vm_folder_name} --datastore "#{ds_path_gsub}" --network ~dest_network #{@disk_size_var} #{@disk_num_var} \
-     --num-vms #{vm_num} --num-cpu #{$num_cpu} --size-ram #{$size_ram} --name-prefix "#{prefix}" #{host_rvc} --storage-policy "#{storage_policy}" --tool "#{$tool}" #{multiwriter_param}})
+     --num-vms #{vm_num} --num-cpu #{$num_cpu} --size-ram #{$size_ram} --name-prefix "#{prefix}" #{host_rvc} --storage-policy "#{storage_policy}" --tool "#{$tool}" #{multiwriter_param} --ctrlr-type #{@ctrlr_type}})
   end
   log = Shellwords.escape("#{$log_path}/#{datastore}-#{batch}-vm-deploy.log")
   `rvc #{$vc_rvc} --path #{$cl_path_escape} -c #{@get_network_instance_escape} -c #{deploy_action_escape} -c 'exit' >> #{log} 2>&1`

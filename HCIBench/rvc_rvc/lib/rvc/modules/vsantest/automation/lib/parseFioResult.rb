@@ -91,11 +91,6 @@ else
         end
       end
       puts "Resource Usage:", resfile
-      
-      vsan_pcpu_usage = _get_vsan_cpu_usage(dir).chomp
-      #puts "CPU USAGE\t= #{cpu_usage}", resfile
-      #puts "RAM USAGE\t= #{ram_usage}", resfile
-      puts "vSAN PCPU USAGE\t= #{vsan_pcpu_usage.to_s}", resfile if vsan_pcpu_usage != ""
       puts res_usage, resfile
     else
       puts "#{dir} doesn't exist!"

@@ -61,7 +61,7 @@ else
             end
             row_num = 0
             subfolders.sort.each_with_index do |testcase,index|
-                if Dir.glob("#{testcase}/iotest-fio-[0-9]*vm").size == 1
+                if Dir.glob("#{testcase}/*.json").size >= 1
                     @empty = false
                     num_vm = 0
                     bs = []

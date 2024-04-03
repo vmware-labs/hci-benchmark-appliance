@@ -26,6 +26,7 @@ def parseSupportBundle bundle_path, test_case_name
   puts "Ingest into InfluxDB...", @parse_support_bundle_log
   humbug_link = `python2 /opt/automation/lib/parse-support-bundle/scripts/perf_analysis.py -f "#{dest_folder}/#{bundle_dir_name}/perf-stats.txt" -p SoapParser -n #{test_case_name} -e #{$ip_Address} -i 172.17.0.1`.chomp
   puts humbug_link, @parse_support_bundle_log
+ `echo "#{_get_resource_util_from_perf_stats(dest_folder+'/'+bundle_dir_name,'vsan-cpu','usedPct')}" > #{$vsan_cpu_usage_file}`
   return humbug_link
 end
 

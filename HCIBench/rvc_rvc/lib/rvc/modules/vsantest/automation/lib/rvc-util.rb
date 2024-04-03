@@ -1,3 +1,5 @@
+require 'nokogiri'
+require 'active_support/all'
 require 'yaml'
 require "ipaddress"
 require 'fileutils'
@@ -137,6 +139,7 @@ $generatereport = "#{$basedir}/generate_report.rb"
 $getvsaninfo = "#{$basedir}/get-vsan-info.rb"
 $humbug_link_file = "#{$basedir}/../tmp/humbug_link"
 $resource_json_file_name = "resource_usage.info" 
+$vsan_cpu_usage_file = "#{$basedir}/../tmp/vsan_cpu_usage_pct.info"
 #Dir path def
 $tmp_path = "#{$basedir}/../tmp/"
 $log_path = "#{$basedir}/../logs/"
@@ -189,7 +192,8 @@ $telegraf_target_clusters_map = {}
 #clusters will be running observer, should be called all the time to the local, along with remote vsan ds specified
 $observer_target_clusters_arr = [$cluster_name]
 $perfsvc_master_nodes = []
-
+$vsan_debug_sharing_path = ""
+$share_folder_name = "vsan_debug"
 class MyJSON
   def self.valid?(value)
     result = JSON.parse(value)
@@ -850,75 +854,6 @@ def _get_datastore_capacity_and_free_space(datastore_name)
   return ds_capacity,ds_freespace
 end
 
-=begin
-def _get_cpu_usage(test_case_path)
-  msg = ""
-  dir = test_case_path
-  _get_cluster_hosts_map
-  $cluster_hosts_map.keys.each do |cluster_name|
-    if File.directory?(dir)
-      Dir.entries(dir).select {|entry| File.directory? File.join(dir,entry) and !(entry =='.' || entry == '..') and entry =~ /iotest-/}.each do |ioFolder|
-        jsonFile_list = `find "#{dir}/#{ioFolder}"/jsonstats/pcpu/ -type f -name 'pcpu*' | grep -e "#{$cluster_hosts_map[cluster_name].join('\|')}" | grep -v thumb`
-        jsonFile_list = jsonFile_list.split("\n")
-        server_resource_usage_arr = []
-        jsonFile_list.each do |file|
-          jsonFile = open(file)
-          json = jsonFile.read
-          parsed = JSON.parse(json)
-          each_resource_usage_arr = []
-          parsed["stats"].each do |vcpu|
-            arr = vcpu[1]["usedPct"]["values"]
-            avg_each_vcpu = arr.inject{ |sum, el| sum + el }.to_f / arr.size
-            each_resource_usage_arr.push(avg_each_vcpu)
-          end
-          avg_each_test_server = each_resource_usage_arr.inject{ |sum, el| sum + el }.to_f / each_resource_usage_arr.size
-          server_resource_usage_arr.push(avg_each_test_server)
-        end
-        avg_test_case = (server_resource_usage_arr.inject{ |sum, el| sum + el }.to_f / server_resource_usage_arr.size).round(2)
-        msg += "#{cluster_name}: #{avg_test_case}%; "
-      end
-    end
-  end
-  if msg.count(";") == 1
-    return msg.scan(/[0-9]*.[0-9]*%/).join 
-  else
-    return msg
-  end
-end
-
-def _get_ram_usage(test_case_path)
-  msg = ""
-  dir = test_case_path
-  _get_cluster_hosts_map
-  $cluster_hosts_map.keys.each do |cluster_name|
-    if File.directory?(dir)
-      Dir.entries(dir).select {|entry| File.directory? File.join(dir,entry) and !(entry =='.' || entry == '..') and entry =~ /iotest-/}.each do |ioFolder|#enter io folder
-        jsonFile_list = `find "#{dir}/#{ioFolder}"/jsonstats/mem/ -type f -name 'system*' | grep -e "#{$cluster_hosts_map[cluster_name].join('\|')}"  | grep -v thumb`
-        jsonFile_list = jsonFile_list.split("\n")
-        server_resource_usage_arr = [] 
-        jsonFile_list.each do |file|
-          jsonFile = open(file)
-          json = jsonFile.read
-          parsed = JSON.parse(json)
-          each_resource_usage_arr = []
-          arr = parsed["stats"]["pctMemUsed"]["values"]
-          avg_each_ram = arr.inject{ |sum, el| sum + el }.to_f / arr.size
-          each_resource_usage_arr.push(avg_each_ram)
-          avg_each_test_server = each_resource_usage_arr.inject{ |sum, el| sum + el }.to_f / each_resource_usage_arr.size
-          server_resource_usage_arr.push(avg_each_test_server)
-        end
-        avg_test_case = (server_resource_usage_arr.inject{ |sum, el| sum + el }.to_f / server_resource_usage_arr.size).round(2)
-        msg += "#{cluster_name}: #{avg_test_case}%; "
-      end
-    end
-  end
-  if msg.count(";") == 1
-    return msg.scan(/[0-9]*.[0-9]*%/).join 
-  else
-    return msg
-  end
-end
-=end
 def _get_vsan_support_url(cluster_name = $cluster_name)
   cl_path, cl_path_escape = _get_cl_path(cluster_name)
   support_url = `rvc #{$vc_rvc} --path #{cl_path_escape} -c "vsantest.perf.get_vsan_support_url ." -c 'exit' -q`.chomp
@@ -953,55 +888,6 @@ def _get_res_usage(startTime,endTime,path)
   return res_usage_table + "\n\ncpu.usage - Provides statistics for logical CPUs. This is based on CPU Hyperthreading.\ncpu.utilization - Provides statistics for physical CPUs."
 end
 
-def _get_vsan_cpu_usage(test_case_path)
-  msg = ""
-  dir = test_case_path
-  _get_cluster_hosts_map
-  $cluster_hosts_map.keys.each do |cluster_name|
-    if File.directory?(dir)
-      pcpu_usage=
-      total_pcpu=
-      dirName = File.basename(dir)
-      Dir.entries(dir).select {|entry| File.directory? File.join(dir,entry) and !(entry =='.' || entry == '..') and entry =~ /iotest-/}.each do |ioFolder|#enter io folder
-        jsonFile_list = `find "#{dir}/#{ioFolder}"/jsonstats/pcpu/ -type f -name 'wdtsum-*' | grep -e "#{$cluster_hosts_map[cluster_name].join('\|')}" | grep -v thumb `
-        jsonFile_list = jsonFile_list.split("\n")
-        file_cpu_usage_arr = [] #each element should be the avg of each server cpu_usage number
-        jsonFile_list.each do |file| # get each server's cpu_usage number
-          jsonFile = open(file)
-          json = jsonFile.read
-          begin
-            parsed = JSON.parse(json)
-          rescue JSON::ParserError => e
-            return e
-          end
-          arr = parsed["stats"]["runTime"]["avgs"]
-          avg_of_file = arr.inject { |sum, el| sum + el }.to_f / arr.size * 100
-          file_cpu_usage_arr.push(avg_of_file)
-        end
-        pcpu_usage=file_cpu_usage_arr.inject{ |sum, el| sum + el }.to_f
-      end
-      Dir.entries(dir).select {|entry| File.directory? File.join(dir,entry) and !(entry =='.' || entry == '..') and entry =~ /iotest-/}.each do |ioFolder|#enter io folder
-        jsonFile_list = `find "#{dir}/#{ioFolder}"/jsonstats/pcpu/ -type f -name 'pcpu*' | grep -e "#{$cluster_hosts_map[cluster_name].join('\|')}" | grep -v thumb`
-        jsonFile_list=jsonFile_list.split("\n")
-        total_num_of_pcpu = [] #each element should be the avg of each server cpu_usage number
-        jsonFile_list.each do |file| # get each server's cpu_usage number
-          jsonFile = open(file)
-          json = jsonFile.read
-          parsed = JSON.parse(json)
-          total_num_of_pcpu.push(parsed["stats"].size)
-        end
-        total_pcpu = total_num_of_pcpu.inject{ |sum, el| sum + el }
-      end
-      msg += "#{cluster_name}: #{(pcpu_usage/total_pcpu).round(2)}%; " if pcpu_usage != 0.0
-    end
-  end
-  if msg.count(";") == 1
-    return msg.scan(/[0-9]*.[0-9]*%/).join 
-  else
-    return msg
-  end
-end
-
 #Convert a string to a unicode string.
 def _convert2unicode(str)
     strNew = ""
@@ -1013,4 +899,76 @@ def _get_vsan_health_summary(cluster_name = $cluster_name)
   cl_path, cl_path_escape = _get_cl_path(cluster_name)
   vsan_health_summary = `rvc #{$vc_rvc} --path #{cl_path_escape} -c "vsan.health.health_summary ." -c 'exit' -q`.chomp
   return vsan_health_summary
+end
+
+def _create_shared_folder(test_case_path,share_folder_name)
+  $vsan_debug_sharing_path = test_case_path + "/#{share_folder_name}"
+  Dir.mkdir($vsan_debug_sharing_path) unless File.exists?($vsan_debug_sharing_path)
+  return $vsan_debug_sharing_path
+end
+
+def _update_export_info(export_path)
+  content = "#{export_path} *(rw,sync,no_root_squash,no_subtree_check)"
+  File.write('/etc/exports',content)
+  `exportfs -r`
+end
+
+def _mount_nfs_to_esxi(host)
+  mount_cmd = "localcli storage nfs remove --volume-name hcibench-volume; localcli storage nfs add --host #{$ip_Address} -s #{$vsan_debug_sharing_path} -v hcibench-volume"
+  host_key = $hosts_credential.has_key?(host) ? host : $hosts_credential.keys[0]
+  host_username = $hosts_credential[host_key]["host_username"]
+  host_password = $hosts_credential[host_key]["host_password"]
+  if ssh_valid(host,host_username,host_password)
+    ssh_cmd(host,host_username,host_password,cmd)
+  end
+end
+
+def _convert_perf_stats_to_json(file_path, metric_name)
+  header = '--------------SOAP stats dump--------------'
+  separator = '--------------Stats Segment Separator--------------'
+  soap_dump = File.read(file_path)
+  xml_segments = soap_dump.sub(header, '').split(separator).map(&:strip).reject(&:empty?)
+  xml_segments.map do |xml_segment|
+    xml_segment.each_line do |line|
+      if line.include? metric_name
+        doc = Nokogiri::XML(line) { |config| config.noblanks.strict }
+        xml_hash = Hash.from_xml(+doc.to_s)
+        return JSON.parse(xml_hash.to_json)['obj']['VsanPerfEntityMetricCSV']
+      end
+    end
+  end
+end
+
+def _get_resource_util_from_perf_stats(bundle_path,metric_name,metric_type)
+  map_file_path = bundle_path + "/cmmds-tool_find--f-python.txt"
+  perf_stats_path = bundle_path + "/perf-stats.txt"
+  map_file = File.read(map_file_path)
+  perf_stats_file = File.read(perf_stats_path)
+  
+  host_hash = {}
+  last_comma_index = map_file.rindex(',')
+  if last_comma_index && last_comma_index != map_file.length - 1
+    map_file[last_comma_index] = ''
+  end
+  map_hash = JSON.parse(map_file)
+  map_hash.each do |item|
+    if item["type"] == "HOSTNAME"
+      host_info = JSON.parse(item["content"])
+      host_hash[item["uuid"]] = host_info["hostname"]
+    end
+  end
+  json_output = _convert_perf_stats_to_json(perf_stats_path, metric_name)
+  json_content = JSON.parse(json_output.to_json)
+  resource_hash = {}
+  json_content.each do |item|
+    item["value"].each do |metric|
+      if metric["metricId"]["label"] == metric_type
+        value_arr = metric["values"].split(",")
+        avg = value_arr.inject(0){|sum,x| sum + x.to_i }/ value_arr.size
+        host_uuid = item["entityRefId"].split(":")[1]
+        resource_hash[host_hash[host_uuid]] = avg
+      end
+    end
+  end
+  JSON.parse(resource_hash.to_json)
 end

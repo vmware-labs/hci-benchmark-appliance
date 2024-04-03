@@ -15,7 +15,7 @@ else
 end
 
 @test_case_name = File.basename(File.expand_path("#{ARGV[0]}"))
-@dest_folder = "#{ARGV[0]}/vm-support-bundle"
+@dest_folder = "#{ARGV[0]}/#{$share_folder_name}/vm-support-bundle"
 
 `mkdir -p #{@dest_folder}`
 

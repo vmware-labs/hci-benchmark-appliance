@@ -16,6 +16,7 @@ IO_RATE=
 PREFIX=
 COMP_RATIO=
 DEDUP_RATIO=
+NVME_CONTROLLER=0
 
 # Function to display usage
 usage()
@@ -35,7 +36,8 @@ usage()
  echo -e "\t-o\tIORate (optional)"
  echo -e "\t-c\tCompression Ratio (optional)"
  echo -e "\t-d\tDeduplication Ratio (optional)" 
- echo -e "\nExample: $0 -n 5 -w 20 -t 2 -b 8k -r 35 -s 60 -e 600 -i 5 -o 15000 -c 2 -d 3"
+ echo -e "\t-N\tUse NVMe Controller, not PVSCSI (optional)"
+ echo -e "\nExample: $0 -n 5 -w 20 -t 2 -b 8k -r 35 -s 60 -e 600 -i 5 -o 15000 -c 2 -d 3 -N"
 }
 
 verify_num()
@@ -60,9 +62,7 @@ then
   exit 1
 fi
 
-
-
-while getopts ":h:n:w:t:b:r:s:e:m:i:p:o:c:d:" Option
+while getopts ":h:n:w:t:b:r:s:e:m:i:p:o:c:d:N" Option
 do
   case $Option in
     h)
@@ -122,6 +122,9 @@ do
       DEDUP_RATIO=$OPTARG
       verify_num $DEDUP_RATIO
       ;;
+    N)
+      NVME_CONTROLLER=1
+      ;;
     ?)
       usage
       exit
@@ -175,47 +178,80 @@ fi
 
 SD_VAR=
 
-if [ $DISK_NUM -lt 27 ] #1~26 vmdks
+if [[ $NVME_CONTROLLER == 1 ]]
 then
-  for i in `seq 1 $DISK_NUM`
-  do
-    echo "sd=sd${i},lun=/dev/sd`chr $( expr $i + 96 )`,openflags=o_direct,hitarea=0,range=(0,$WORKING_SET)$THREADS_VAR" >> $FILENAME
-    SD_VAR=$SD_VAR"sd$i,"
-  done
-elif [ $DISK_NUM -gt 26 ] && [ $DISK_NUM -lt 53 ]  #27 vmdks to 52vmdk
-then
-  for i in `seq 1 26`
-  do
-    echo "sd=sd${i},lun=/dev/sd`chr $( expr $i + 96 )`,openflags=o_direct,hitarea=0,range=(0,$WORKING_SET)$THREADS_VAR" >> $FILENAME
-    SD_VAR=$SD_VAR"sd$i,"
+  total_disks=$DISK_NUM
+  controllers=1
+  disk_count=$total_disks
+  # Determine the number of controllers needed
+  if ((total_disks >= 5 && total_disks <= 8)); then
+      controllers=2
+  elif ((total_disks >= 9)); then
+      controllers=3
+  fi
+
+  disk=1
+  controller=0
+  while ((disk_count > 0)); do
+    # Distribute disks across controllers
+    while ((disk <= $((total_disks / controllers)))); do
+        for ((controller=0; controller < controllers; controller++)); do
+            echo "sd=sd$((total_disks - disk_count + 1)),lun=/dev/nvme${controller}n${disk},openflags=o_direct,hitarea=0,range=(0,$WORKING_SET)$THREADS_VAR" >> $FILENAME
+            SD_VAR=$SD_VAR"sd$((total_disks - disk_count + 1)),"
+            ((disk_count--))
+        done
+        ((disk++))
+    done
+
+    rest_disk=$((total_disks % controllers))
+    if [[ $rest_disk != 0 ]]; then
+      for ((controller=0; controller < $rest_disk; controller++)); do
+          echo "sd=sd$((total_disks - disk_count + 1)),lun=/dev/nvme${controller}n${disk},openflags=o_direct,hitarea=0,range=(0,$WORKING_SET)$THREADS_VAR" >> $FILENAME
+          SD_VAR=$SD_VAR"sd$((total_disks - disk_count + 1)),"
+          ((disk_count--))
+      done
+    fi
   done
 
-  ADDITIONAL_DISK=$( expr $DISK_NUM - 26 )
-  for i in `seq 1 $ADDITIONAL_DISK`
-  do
-    echo "sd=sd$( expr $i + 26 ),lun=/dev/sda`chr $( expr $i + 96 )`,openflags=o_direct,hitarea=0,range=(0,$WORKING_SET)$THREADS_VAR" >> $FILENAME
-    SD_VAR=$SD_VAR"sd$( expr $i + 26 ),"
-  done
-else #more than 52
-  for i in `seq 1 26`
-  do
-    echo "sd=sd${i},lun=/dev/sd`chr $( expr $i + 96 )`,openflags=o_direct,hitarea=0,range=(0,$WORKING_SET)$THREADS_VAR" >> $FILENAME
-    SD_VAR=$SD_VAR"sd$i,"
-  done
-
-  ADDITIONAL_DISK=$( expr $DISK_NUM - 52 )
-  for i in `seq 1 26`
-  do
-    echo "sd=sd$( expr $i + 26 ),lun=/dev/sda`chr $( expr $i + 96 )`,openflags=o_direct,hitarea=0,range=(0,$WORKING_SET)$THREADS_VAR" >> $FILENAME
-    SD_VAR=$SD_VAR"sd$( expr $i + 26 ),"
-  done
-
-  for i in `seq 1 $ADDITIONAL_DISK`
-  do
-    echo "sd=sd$( expr $i + 52 ),lun=/dev/sdb`chr $( expr $i + 96 )`,openflags=o_direct,hitarea=0,range=(0,$WORKING_SET)$THREADS_VAR" >> $FILENAME
-    SD_VAR=$SD_VAR"sd$( expr $i + 52 ),"
-  done
-
+else
+  if [ $DISK_NUM -lt 27 ] #1~26 vmdks
+  then
+    for i in `seq 1 $DISK_NUM`
+    do
+      echo "sd=sd${i},lun=/dev/sd`chr $( expr $i + 96 )`,openflags=o_direct,hitarea=0,range=(0,$WORKING_SET)$THREADS_VAR" >> $FILENAME
+      SD_VAR=$SD_VAR"sd$i,"
+    done
+  elif [ $DISK_NUM -gt 26 ] && [ $DISK_NUM -lt 53 ]  #27 vmdks to 52vmdk
+  then
+    for i in `seq 1 26`
+    do
+      echo "sd=sd${i},lun=/dev/sd`chr $( expr $i + 96 )`,openflags=o_direct,hitarea=0,range=(0,$WORKING_SET)$THREADS_VAR" >> $FILENAME
+      SD_VAR=$SD_VAR"sd$i,"
+    done
+    ADDITIONAL_DISK=$( expr $DISK_NUM - 26 )
+    for i in `seq 1 $ADDITIONAL_DISK`
+    do
+      echo "sd=sd$( expr $i + 26 ),lun=/dev/sda`chr $( expr $i + 96 )`,openflags=o_direct,hitarea=0,range=(0,$WORKING_SET)$THREADS_VAR" >> $FILENAME
+      SD_VAR=$SD_VAR"sd$( expr $i + 26 ),"
+    done
+  else #more than 52
+    for i in `seq 1 26`
+    do
+      echo "sd=sd${i},lun=/dev/sd`chr $( expr $i + 96 )`,openflags=o_direct,hitarea=0,range=(0,$WORKING_SET)$THREADS_VAR" >> $FILENAME
+      SD_VAR=$SD_VAR"sd$i,"
+    done
+    ADDITIONAL_DISK=$( expr $DISK_NUM - 52 )
+    for i in `seq 1 26`
+    do
+      echo "sd=sd$( expr $i + 26 ),lun=/dev/sda`chr $( expr $i + 96 )`,openflags=o_direct,hitarea=0,range=(0,$WORKING_SET)$THREADS_VAR" >> $FILENAME
+      SD_VAR=$SD_VAR"sd$( expr $i + 26 ),"
+    done
+    for i in `seq 1 $ADDITIONAL_DISK`
+    do
+      echo "sd=sd$( expr $i + 52 ),lun=/dev/sdb`chr $( expr $i + 96 )`,openflags=o_direct,hitarea=0,range=(0,$WORKING_SET)$THREADS_VAR" >> $FILENAME
+      SD_VAR=$SD_VAR"sd$( expr $i + 52 ),"
+    done
+  fi
 fi
 
 SD_VAR="${SD_VAR%?}"

@@ -102,10 +102,15 @@ for item in Dir.entries($self_defined_param_file_path).sort
 
   #after testing running for sleep_time seconds, collect vmkstats, for vSAN engrs only.
   if @debug_mode 
+    puts "Create NFS Share on HCIBench, the path is #{$output_path_dir}/#{item}-#{time}/#{$share_folder_name}",@log_file
+    _create_shared_folder($output_path_dir + "/#{item}-#{time}",$share_folder_name)
+    puts "Update NFS Exports Info...",@log_file
+    _update_export_info("#{$output_path_dir}/#{item}-#{time}/#{$share_folder_name}")
+    puts "Mount Shared Folder to Hosts...",@log_file
+    `ruby /opt/automation/lib/prep-host-vsan-debug.rb #{$output_path_dir}/#{item}-#{time}/#{$share_folder_name} false`
     @vmk_collected = false
     Thread.start { collectVmkStats("#{$output_path_dir}/#{item}-#{time}",@sleep_time)}
   end
-
   cluster_path_arr = ""
   $observer_target_clusters_arr.each do |target_cluster|
     target_cluster_path_pass = _get_cl_path(target_cluster)[0].gsub("\\","\\\\\\").gsub('"','\"')
@@ -147,20 +152,6 @@ for item in Dir.entries($self_defined_param_file_path).sort
 
   puts %{Workload #{item} finished, preparing the results...},@status_log_file
 
-  if File.file?("#{$output_path_dir}/#{item}-#{time}/iotest-#{$tool}-#{$vm_num}vm/stats.html")
-    puts "Observer successfully completed!",item_log
-  else
-    if File.file?("#{$output_path_dir}/#{item}-#{time}/iotest-#{$tool}-#{$vm_num}vm/observer.json")
-      puts "Stats.html file is missing, Observer.json file found, reprocessing stats page...",item_log
-      process_observer_action_escape = Shellwords.escape(%{vsantest.vsan_hcibench.observer_process_statsfile \
-        "#{$output_path_dir}/#{item}-#{time}/iotest-#{$tool}-#{$vm_num}vm/observer.json" \
-        "#{$output_path_dir}/#{item}-#{time}/iotest-#{$tool}-#{$vm_num}vm/"})
-        `rvc #{$vc_rvc} --path #{@folder_path_escape} -c #{process_observer_action_escape} -c 'exit' -q >> #{item_log} 2>&1`
-    else
-      puts "Observer.json file not found!",item_log
-    end
-  end
-
   #copy over perf-conf.yaml and workload parameters to results folder
   puts `cp #{file_path} #{$output_path_dir}/#{item}-#{time}/#{$tool}.cfg`,@log_file
   `cp #{$basedir}/../conf/perf-conf.yaml #{$output_path_dir}/#{item}-#{time}/hcibench.cfg`
@@ -177,11 +168,13 @@ for item in Dir.entries($self_defined_param_file_path).sort
   threads_arr << Thread.new{`#{cal_result_exe} | tee -a #{@log_file}`}
   threads_arr << Thread.new{getVsanInfo("#{$output_path_dir}/#{item}-#{time}/")}
   if @debug_mode
+    puts "Unmount Shared Folder from Hosts...",@log_file
+    `ruby /opt/automation/lib/prep-host-vsan-debug.rb #{$output_path_dir}/#{item}-#{time}/#{$share_folder_name} true`    
     #collect support bundle
     end_time = Time.now.to_i
     threads_arr << Thread.new{collectSupportBundle("#{$output_path_dir}/#{item}-#{time}", time, end_time)}
     if @vmk_collected
-      threads_arr << Thread.new{processVmkStats("#{$output_path_dir}/#{item}-#{time}")} 
+      threads_arr << Thread.new{processVmkStats("#{$output_path_dir}/#{item}-#{time}/#{$share_folder_name}")} 
       puts %{Parsing Results, Collecting VM Support bundle from ESXi hosts and Parsing vmkstats files...},@status_log_file
     else
       puts %{Parsing Results and Collecting VM Support bundle from ESXi hosts...},@status_log_file
@@ -191,6 +184,9 @@ for item in Dir.entries($self_defined_param_file_path).sort
   if File.exist?($humbug_link_file)
     link = File.read($humbug_link_file)
     `echo "\n\nvSAN Performance Stats Graph: #{link}" >> "#{$output_path_dir}/#{item}-#{time}-res.txt"`
+  end
+  if File.exist?($vsan_cpu_usage_file)
+    `cp #{$vsan_cpu_usage_file} #{$output_path_dir}/#{item}-#{time}/`
   end
   puts %{Done Testing #{item}, Click <a href="#{resfile}" target="_blank">HERE</a> to view the result},@status_log_file
   puts %{Generating PDF Report...},@status_log_file

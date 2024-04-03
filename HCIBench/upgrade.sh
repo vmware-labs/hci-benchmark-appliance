@@ -194,6 +194,8 @@ mv -f $PACKAGES/vmFacilities/* ~/tmp/
 chmod +x ~/tmp/*
 echo "Install pip2"
 tdnf install python-pip -y
+echo "install nfs utils"
+tdnf install nfs-utils rpcbind -y
 echo "install pip2 pkgs"
 pip2 install six requests
 

@@ -71,11 +71,6 @@ def genReport(result_path)
   cluster_name_url=CGI.escape($cluster_name)
   html = html.gsub(/<hcitag:cluster_name>/, cluster_name_url)
 
-  stats_path = Dir["#{result_path}/**/stats.html"]
-  stats_path = stats_path[0]
-  stats_path = stats_path.gsub("/opt/output", "http://" + _get_ip_addr)
-  html = html.gsub(/<hcitag:stats_addr>/, stats_path)
-
   if $vsan_debug and humbug_link != ""
     html = html.gsub(/<hcitag:humbug>/, humbug_link)
   else

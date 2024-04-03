@@ -314,7 +314,8 @@ opts :add_data_disk do
   opt :no_thin, 'Use thick provisioning', :type => :boolean
   opt :size_gb, "Size of disk in GB", :default => 10, :type => :integer
   opt :num, "Number of disks", :default => 10, :type => :integer
-  opt :add_pvscsi, "If need to add pvscsi", :type => :boolean
+  opt :add_ctrlr, "If need to add ctrlr", :type => :boolean
+  opt :ctrlr_type, "vController type, pvscsi or nvme", :default => "pvscsi", :type => :string
   opt :profile_id, "Id of storage policy", :type => :string
   opt :multi_writer, "whether do multi_writer", :default => false, :type => :boolean
 end
@@ -322,21 +323,22 @@ end
 def add_data_disk vms, opts
   profile_id = ""
   profile_id = "--profile-id #{opts[:profile_id]} " if opts[:profile_id] and opts[:profile_id] != ""
-  num_pvscsi = [(opts[:num].to_f/4).ceil,3].min
+  num_ctrlr = [(opts[:num].to_f/4).ceil,3].min
   disk_num_pvs_more = 0
   disk_num_pvs_less = 0
-  num_pvs_more = opts[:num] % num_pvscsi
-  num_pvs_less = num_pvscsi - num_pvs_more
-  disk_num_pvs_more = opts[:num] / num_pvscsi + 1 if num_pvs_more != 0 #disks distribution not even
-  disk_num_pvs_less = opts[:num] / num_pvscsi
-
-  if opts[:add_pvscsi]
+  num_pvs_more = opts[:num] % num_ctrlr
+  num_pvs_less = num_ctrlr - num_pvs_more
+  disk_num_pvs_more = opts[:num] / num_ctrlr + 1 if num_pvs_more != 0 #disks distribution not even
+  disk_num_pvs_less = opts[:num] / num_ctrlr
+  ctrlr_seq = "3100"
+  ctrlr_seq = "100" if opts[:ctrlr_type] == "pvscsi"
+  if opts[:add_ctrlr]
     vms.each do |x|
       $shell.fs.marks['foo'] = [x];
-      for i in 1..num_pvscsi
+      for i in 1..num_ctrlr
         params = [
           "device.add_scsi_controller ",
-          "-t pvscsi ",
+          "-t #{opts[:ctrlr_type]} ",
         "~foo"]
         params.join(" ")
         $shell.eval_command(params.join(" "))
@@ -367,10 +369,14 @@ def add_data_disk vms, opts
       stop_creating = false
       $shell.fs.marks['foo'] = [vm]
       disk_num = vm_disk_map[vm.name][0]
-      for i in 0...num_pvscsi
+      for i in 0...num_ctrlr
         disk_num_deploy = disk_num_pvs_less
         disk_num_deploy = disk_num_pvs_more if i < num_pvs_more
-        pvscsi = i + 1
+        if opts[:ctrlr_type] == "pvscsi"
+          ctrlr = i + 1
+        else
+          ctrlr = i
+        end
         for j in 0...disk_num_deploy
           if disk_num > 0
             disk_num -= 1
@@ -381,7 +387,7 @@ def add_data_disk vms, opts
           params = [
             "vsantest.vsan.device_add_disk",
             "-s #{opts[:size_gb]}Gi",
-            "--controller ~foo/devices/pvscsi-100#{pvscsi}/",
+	    "--controller ~foo/devices/#{opts[:ctrlr_type]}-#{ctrlr_seq}#{ctrlr}/",
             "-f create",
             "-m",
             profile_id,
@@ -399,7 +405,7 @@ def add_data_disk vms, opts
 
   vms.each_with_index do |x,vm_index|
     $shell.fs.marks['foo'] = [x];
-    if opts[:add_pvscsi]
+    if opts[:add_ctrlr]
       existing_vmdk_num = 0
       local_path_params = []
       multi_writer_param = ""
@@ -419,13 +425,17 @@ def add_data_disk vms, opts
 
       puts "Adding #{opts[:num]} disks"
       path_param = ""
-      for i in 0...num_pvscsi
+      for i in 0...num_ctrlr
         if i < num_pvs_more
           disk_num_deploy = disk_num_pvs_more
         else
           disk_num_deploy = disk_num_pvs_less
         end
-        pvscsi = i + 1
+        if opts[:ctrlr_type] == "pvscsi"
+          ctrlr = i + 1
+        else
+          ctrlr = i
+        end
         for j in 0...disk_num_deploy
           if existing_vmdk_num > 0
             existing_vmdk_num -= 1
@@ -438,7 +448,7 @@ def add_data_disk vms, opts
           params = [
             "vsantest.vsan.device_add_disk",
             "-s #{opts[:size_gb]}Gi",
-            "--controller ~foo/devices/pvscsi-100#{pvscsi}/",
+	    "--controller ~foo/devices/#{opts[:ctrlr_type]}-#{ctrlr_seq}#{ctrlr}/",
             reuse_param,
             multi_writer_param,
             profile_id,
@@ -455,49 +465,54 @@ def add_data_disk vms, opts
       end
     else # post-adding-disks
       #get current num of disks
-      $shell.eval_command("vsantest.mark_hcibench num ~foo/devices/disk*-100*")
+      $shell.eval_command("vsantest.mark_hcibench num ~foo/devices/disk*-#{ctrlr_seq}*")
       disk_num = $shell.eval_command("vsantest.mark_hcibench.count num")
       total_disk_num = opts[:num] + disk_num - 1
 
-      num_pvscsi = [(total_disk_num.to_f/4).ceil,3].min
+      num_ctrlr = [(total_disk_num.to_f/4).ceil,3].min
 
-      $shell.eval_command("vsantest.mark_hcibench pvscsi ~foo/devices/pvscsi-*")
-      has_num_pvscsi = $shell.eval_command("vsantest.mark_hcibench.count pvscsi")
+      $shell.eval_command("vsantest.mark_hcibench #{opts[:ctrlr_type]} ~foo/devices/#{opts[:ctrlr_type]}-*")
+      has_num_ctrlr = $shell.eval_command("vsantest.mark_hcibench.count #{opts[:ctrlr_type]}")
 
-      while has_num_pvscsi < num_pvscsi
+      while has_num_ctrlr < num_ctrlr
         params = [
           "device.add_scsi_controller ",
-          "-t pvscsi ",
+          "-t #{opts[:ctrlr_type]} ",
           "~foo"
         ]
         params.join(" ")
         $shell.eval_command(params.join(" "))
         sleep 1
-        $shell.eval_command("vsantest.mark_hcibench pvscsi ~foo/devices/pvscsi-*")
-        has_num_pvscsi = $shell.eval_command("vsantest.mark_hcibench.count pvscsi")
+        $shell.eval_command("vsantest.mark_hcibench #{opts[:ctrlr_type]} ~foo/devices/#{opts[:ctrlr_type]}-*")
+        has_num_ctrlr = $shell.eval_command("vsantest.mark_hcibench.count #{opts[:ctrlr_type]}")
       end
 
       disk_num_pvs_more = 0
       disk_num_pvs_less = 0
-      num_pvs_more = total_disk_num % num_pvscsi
-      num_pvs_less = num_pvscsi - num_pvs_more
+      num_pvs_more = total_disk_num % num_ctrlr
+      num_pvs_less = num_ctrlr - num_pvs_more
       if num_pvs_more != 0 #disks distribution not even
-        disk_num_pvs_more = total_disk_num / num_pvscsi + 1
+        disk_num_pvs_more = total_disk_num / num_ctrlr + 1
       end
-      disk_num_pvs_less = total_disk_num / num_pvscsi
+      disk_num_pvs_less = total_disk_num / num_ctrlr
       disk_num_deploy = 0
 
-      for i in 0...num_pvscsi
+      for i in 0...num_ctrlr
         if i < num_pvs_more
           disk_num_deploy = disk_num_pvs_more
         else
           disk_num_deploy = disk_num_pvs_less
         end
-        pvscsi = i + 1
+        if opts[:ctrlr_type] == "pvscsi"
+          ctrlr = i + 1
+        else
+          ctrlr = i
+        end 
+        
         has_disk_num = 0
         check_num = true
         begin
-          $shell.eval_command("vsantest.mark_hcibench num ~foo/devices/disk*-100#{pvscsi}-*")
+          $shell.eval_command("vsantest.mark_hcibench num ~foo/devices/disk*-#{ctrlr_seq}#{ctrlr}-*")
         rescue Exception => e
           puts e
           check_num = false
@@ -510,7 +525,7 @@ def add_data_disk vms, opts
           params = [
             "vsantest.vsan.device_add_disk ",
             "-s #{opts[:size_gb]}Gi",
-            "--controller ~foo/devices/pvscsi-100#{pvscsi}/ ",
+            "--controller ~foo/devices/#{opts[:ctrlr_type]}-#{ctrlr_seq}#{ctrlr}/ ",
             profile_id,
             "~foo"
           ]
@@ -520,7 +535,7 @@ def add_data_disk vms, opts
           params.join(" ")
           $shell.eval_command(params.join(" "))
           sleep 1
-          $shell.eval_command("vsantest.mark_hcibench num ~foo/devices/disk*-100#{pvscsi}-*")
+          $shell.eval_command("vsantest.mark_hcibench num ~foo/devices/disk*-#{ctrlr_seq}#{ctrlr}-*")
           has_disk_num = $shell.eval_command("vsantest.mark_hcibench.count num")
         end
       end
@@ -2143,6 +2158,7 @@ opts :deploy_test_vms do
   opt :num_cpu, "number of CPU to configure per VM", :default => 4, :type => :integer
   opt :size_ram, "size of RAM to configure per VM in GB", :default => 8, :type => :integer
   opt :multi_writer, "whether to deploy multi-writer disks", :default => false, :type => :boolean
+  opt :ctrlr_type, "vController type, pvscsi or nvme", :default => "pvscsi", :type => :string
 end
 
 def deploy_test_vms cluster, opts
@@ -2230,7 +2246,8 @@ def deploy_test_vms cluster, opts
             :no_thin => opts[:no_thin],
             :size_gb => opts[:datadisk_size_gb],
             :num => opts[:datadisk_num],
-            :add_pvscsi => true,
+            :add_ctrlr => true,
+            :ctrlr_type => opts[:ctrlr_type],
             :profile_id => opts[:storage_policy]? get_policy_id_by_name(vm,opts[:storage_policy]) : ""
             ) if not opts[:multi_writer]
           vms << vm
@@ -2281,7 +2298,8 @@ def deploy_test_vms cluster, opts
           :no_thin => opts[:no_thin],
           :size_gb => opts[:datadisk_size_gb],
           :num => opts[:datadisk_num],
-          :add_pvscsi => true,
+          :add_ctrlr => true,
+          :ctrlr_type => opts[:ctrlr_type],
           :profile_id => opts[:storage_policy]? get_policy_id_by_name(vm,opts[:storage_policy]) : ""
           ) if not opts[:multi_writer]
         vms << vm
@@ -2312,7 +2330,8 @@ def deploy_test_vms cluster, opts
     :no_thin => opts[:no_thin],
     :size_gb => opts[:datadisk_size_gb],
     :num => opts[:datadisk_num],
-    :add_pvscsi => true,
+    :add_ctrlr => true,
+    :ctrlr_type => opts[:ctrlr_type],
     :multi_writer => true,
     :profile_id => opts[:storage_policy]? get_policy_id_by_name(vm,opts[:storage_policy]) : ""
     ) if opts[:multi_writer]
@@ -2398,7 +2417,8 @@ def deploy_test_vms cluster, opts
           :no_thin => opts[:no_thin],
           :size_gb => opts[:datadisk_size_gb],
           :num => (opts[:datadisk_num].to_i-disk_num),
-          :add_pvscsi => false,
+          :add_ctrlr => false,
+          :ctrlr_type => opts[:ctrlr_type],
           :profile_id => opts[:storage_policy]? get_policy_id_by_name(vm,opts[:storage_policy]) : ""
           )
       elsif check_retry == 3
@@ -2446,3 +2466,4 @@ def run_observer vcip, path, name
     runAnalyzer(tracefile)
   end
 end
+
