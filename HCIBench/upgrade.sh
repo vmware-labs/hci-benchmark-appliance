@@ -42,7 +42,7 @@ echo ""
 # VARIABLES
 # *******************************
 DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
-PACKAGES="$DIR/rvc_rvc/lib/rvc/modules/vsantest/packages"
+PACKAGES="$DIR/misc_pkgs"
 GIT_HCIB_BRANCH='master'
 BUILD_VERSION='UNKNOWN'
 BUILD_DATE=`date`
@@ -229,8 +229,8 @@ echo ""
 # ***********************************************
 echo -e "\e[33mCreating automation part and restoring config files...\e[0m"
 mkdir -p /opt/vmware
-mv $DIR/rvc_rvc/lib/rvc/modules/vsantest/automation /opt
-mv -f $DIR/rvc_rvc/lib/rvc/modules/vsantest/packages/graphites /opt/output/vm-template/
+mv $DIR/automation /opt
+mv -f $DIR/misc_pkgs/graphites /opt/output/vm-template/
 chmod 755 /opt/output/vm-template/graphites/*
 for subdir in 'conf' 'vdbench-param-files' 'fio-param-files' 'tmp' 'logs'
 do

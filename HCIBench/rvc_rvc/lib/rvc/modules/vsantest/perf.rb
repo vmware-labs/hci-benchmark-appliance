@@ -33,6 +33,11 @@ class VIM::VirtualMachine
     self.ssh do |ssh|
       num = ssh.exec!(cmd).delete!("\n").to_i - 1
     end
+    if num == 0
+      self.ssh do |ssh|
+        num = ssh.exec!("ls /sys/block | grep nvme | wc -l").delete!("\n").to_i
+      end
+    end
     return num
   end
 
@@ -465,13 +470,12 @@ def add_data_disk vms, opts
       end
     else # post-adding-disks
       #get current num of disks
-      $shell.eval_command("vsantest.mark_hcibench num ~foo/devices/disk*-#{ctrlr_seq}*")
+      $shell.eval_command("vsantest.mark_hcibench.mark num ~foo/devices/disk*-#{ctrlr_seq}*")
       disk_num = $shell.eval_command("vsantest.mark_hcibench.count num")
       total_disk_num = opts[:num] + disk_num - 1
 
       num_ctrlr = [(total_disk_num.to_f/4).ceil,3].min
-
-      $shell.eval_command("vsantest.mark_hcibench #{opts[:ctrlr_type]} ~foo/devices/#{opts[:ctrlr_type]}-*")
+      $shell.eval_command("vsantest.mark_hcibench.mark #{opts[:ctrlr_type]} ~foo/devices/#{opts[:ctrlr_type]}-*")
       has_num_ctrlr = $shell.eval_command("vsantest.mark_hcibench.count #{opts[:ctrlr_type]}")
 
       while has_num_ctrlr < num_ctrlr
@@ -483,10 +487,9 @@ def add_data_disk vms, opts
         params.join(" ")
         $shell.eval_command(params.join(" "))
         sleep 1
-        $shell.eval_command("vsantest.mark_hcibench #{opts[:ctrlr_type]} ~foo/devices/#{opts[:ctrlr_type]}-*")
+        $shell.eval_command("vsantest.mark_hcibench.mark #{opts[:ctrlr_type]} ~foo/devices/#{opts[:ctrlr_type]}-*")
         has_num_ctrlr = $shell.eval_command("vsantest.mark_hcibench.count #{opts[:ctrlr_type]}")
       end
-
       disk_num_pvs_more = 0
       disk_num_pvs_less = 0
       num_pvs_more = total_disk_num % num_ctrlr
@@ -512,7 +515,7 @@ def add_data_disk vms, opts
         has_disk_num = 0
         check_num = true
         begin
-          $shell.eval_command("vsantest.mark_hcibench num ~foo/devices/disk*-#{ctrlr_seq}#{ctrlr}-*")
+          $shell.eval_command("vsantest.mark_hcibench.mark num ~foo/devices/disk*-#{ctrlr_seq}#{ctrlr}-*")
         rescue Exception => e
           puts e
           check_num = false
@@ -535,7 +538,7 @@ def add_data_disk vms, opts
           params.join(" ")
           $shell.eval_command(params.join(" "))
           sleep 1
-          $shell.eval_command("vsantest.mark_hcibench num ~foo/devices/disk*-#{ctrlr_seq}#{ctrlr}-*")
+          $shell.eval_command("vsantest.mark_hcibench.mark num ~foo/devices/disk*-#{ctrlr_seq}#{ctrlr}-*")
           has_disk_num = $shell.eval_command("vsantest.mark_hcibench.count num")
         end
       end
@@ -651,44 +654,14 @@ def runVmkstatsThread(host, dir)
   end
 end
 
-def runTestWithAnalyzer path, name, vcip, hosts, opts = {}
-  FileUtils.mkdir_p("#{path}/#{name}")
-  tracefile_path = "#{path}/#{name}/observer.json"
-  tracefolder_path = "#{path}/#{name}"
-  tracefile_path_remote = "#{path}/#{name}-remote/observer.json"
-  tracefolder_path_remote = "#{path}/#{name}-remote"
-  ob_remotes = []
-  if $clusterpath.size >= 2
-    remote_cluster_path = $clusterpath[1..-1]
-    remote_cluster_path.each do |remote_cluster|
-      ob_remotes << runObserver(vcip, tracefolder_path, opts, remote_cluster);
-    end
-  end
-
+def runVsanPerfDiagnostic path, vcip, opts = {}
   time_range_name = "HCIBench-" + path.rpartition('/')[-1]
   startTime = get_current_time_by_path[0]
-  ob = runObserver(vcip, tracefolder_path, opts, $clusterpath[0]);
   paramFile = opts[:paramFile]
 
   begin
     yield
   ensure
-    [ob].each do |pid|
-      puts "#{Time.now}: Killing pid #{pid}"
-      Process.kill("-KILL", Process.getpgid(pid));
-    end
-    if $clusterpath.size >= 2
-      ob_remotes.each do |ob_remote|
-        [ob_remote].each do |pid|
-          puts "#{Time.now}: Killing pid #{pid}"
-          Process.kill("-KILL", Process.getpgid(pid));
-        end
-      end
-    end
-
-    vc_rvc = Shellwords.escape("#{$vcusername}:#{$vcpassword}") + "@#{vcip}"
-    system("rvc #{vc_rvc} -c 'vsantest.vsan_hcibench.observer_process_statsfile \"#{tracefile_path}\" \"#{path}/#{name}\" ' -c 'exit' -q ")
-
     if $vsan_perf_diag
       vsanPerfServiceEnabled = false
       ceip_enabled = false
@@ -832,7 +805,7 @@ def runIoTest(vms, path, name, opts)
   if opts[:oio]; name += "-oio#{opts[:oio]}"; end
   if opts[:nameSuffix]; name += "-#{opts[:nameSuffix]}"; end
   opts[:vms] = vms
-  runTestWithAnalyzer(path, name, vcip, hosts, opts) do
+  runVsanPerfDiagnostic(path, vcip, opts) do
     threads = vms.map do |v|
       thread = Thread.new do
         begin
@@ -2466,4 +2439,3 @@ def run_observer vcip, path, name
     runAnalyzer(tracefile)
   end
 end
-
