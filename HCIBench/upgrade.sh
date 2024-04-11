@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION="2.8.1"
+VERSION="2.8.3"
 echo $VERSION > /etc/hcibench_version
 currentversion=`grep Welcome /etc/issue | awk '{print $5}'`
 sed "s/$currentversion/$VERSION/g" -i /etc/issue*
