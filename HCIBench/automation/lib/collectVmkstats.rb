@@ -30,7 +30,7 @@ def run_cmd(host)
     puts "Uploading collection script to #{host}",@collect_vmkstats_log
     scp_item(host,host_username,host_password, @collect_vmkstats_script, parent_folder)
     puts "Start collecting vmkstats on #{host}", @collect_vmkstats_log
-    ssh_cmd(host,host_username,host_password,"python #{parent_folder}/vmkstats.py -c default -o #{parent_folder} > #{parent_folder}/vmkstatsCollect.log 2>&1")
+    puts ssh_cmd_with_return(host,host_username,host_password,"python #{parent_folder}/vmkstats.py -c default -o #{parent_folder} > #{parent_folder}/vmkstatsCollect.log 2>&1"), @collect_vmkstats_log
   else
     puts "Unable to SSH to #{host}",@collect_vmkstats_log
     @failure = true

@@ -306,6 +306,11 @@ def validate_misc_info
     (@vsan_datastores.keys & $datastore_names).each do |datastore_name|
       hosts_list_drop_cache = hosts_list_drop_cache | _get_hosts_list(_get_vsan_cluster_from_datastore(datastore_name))
     end
+    if $vsan_debug
+      puts "vSAN Debug Mode is enabled, Create NFS target at /tmp/pre-validation"
+      _create_shared_folder('/tmp','pre-validation')
+      _update_export_info('/tmp/pre-validation')
+    end
     hosts_list_drop_cache = hosts_list_drop_cache | _get_hosts_list if $vsan_debug
     hosts_list_drop_cache.each do |host|
       host_key = $hosts_credential.has_key?(host) ? host : $hosts_credential.keys[0]
@@ -313,6 +318,21 @@ def validate_misc_info
       host_password = $hosts_credential[host_key]["host_password"]
       err_msg "Cannot Resolve Host #{host} Hostname, Please Check the DNS Settings!" if !_is_ip(host) and _get_ip_from_hostname(host) == "Unresolvable"
       err_msg "Check your network see if port 22 is blocked from HCIBench to Host #{host}, otherwise the Host #{host} Username or Password is NOT correct or SSH Service is not Enabled!" if !ssh_valid(host,host_username,host_password)
+      if $vsan_debug
+        puts "Mount NFS target to #{host}"
+        _mount_nfs_to_esxi(host)
+        if not File.exists?("/tmp/pre-validation/#{host}")
+          _unmount_nfs_from_esxi(host)
+          puts "Removing temporary NFS target"
+          _remove_export_info('/tmp/pre-validation')
+          err_msg "Can't mount NFS target to #{host}"
+        end
+        _unmount_nfs_from_esxi(host)
+      end
+    end
+    if $vsan_debug
+      puts "Removing temporary NFS target"
+      _remove_export_info('/tmp/pre-validation')
     end
     puts "Hosts credential and SSH service is verified."
   end

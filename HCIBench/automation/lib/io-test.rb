@@ -18,7 +18,7 @@ require "cgi"
 @ip_url = @ip_Address
 @ip_url = "[" + @ip_Address + "]" if IPAddress.valid_ipv6? @ip_Address
 @http_place = "https://#{@ip_url}:8443/output/results"
-@sleep_time = 1800
+@sleep_time = 180
 @debug_mode = $vsan_debug
 @vsan_clusters_for_debug = [$cluster_name]
 @vmk_collected = false
@@ -51,11 +51,22 @@ end
 
 def collectVmkStats(res_path,sleep_time)
   sleep(sleep_time)
+  puts "Create NFS Share on HCIBench, the path is /tmp/#{$share_folder_name}",@log_file
+  _create_shared_folder("/tmp",$share_folder_name)
+  puts "Update NFS Exports Info...",@log_file
+  _update_export_info("/tmp/#{$share_folder_name}")
+  puts "Mount Shared Folder to Hosts...",@log_file
+  `ruby /opt/automation/lib/prep-host-vsan-debug.rb /tmp/#{$share_folder_name} false`
+  
   `ruby /opt/automation/lib/collectVmkstats.rb #{res_path} "false"`
   @vmk_collected = true  
+  puts "Unmount Shared Folder from Hosts...",@log_file
+  `ruby /opt/automation/lib/prep-host-vsan-debug.rb /tmp/#{$share_folder_name} true`
+  _remove_export_info
 end
 
 def processVmkStats(res_path)
+  `mv /tmp/#{$share_folder_name}/* #{res_path}`
   `ruby /opt/automation/lib/collectVmkstats.rb #{res_path} "true"`
 end
 
@@ -102,12 +113,7 @@ for item in Dir.entries($self_defined_param_file_path).sort
 
   #after testing running for sleep_time seconds, collect vmkstats, for vSAN engrs only.
   if @debug_mode 
-    puts "Create NFS Share on HCIBench, the path is #{$output_path_dir}/#{item}-#{time}/#{$share_folder_name}",@log_file
     _create_shared_folder($output_path_dir + "/#{item}-#{time}",$share_folder_name)
-    puts "Update NFS Exports Info...",@log_file
-    _update_export_info("#{$output_path_dir}/#{item}-#{time}/#{$share_folder_name}")
-    puts "Mount Shared Folder to Hosts...",@log_file
-    `ruby /opt/automation/lib/prep-host-vsan-debug.rb #{$output_path_dir}/#{item}-#{time}/#{$share_folder_name} false`
     @vmk_collected = false
     Thread.start { collectVmkStats("#{$output_path_dir}/#{item}-#{time}",@sleep_time)}
   end
@@ -168,8 +174,9 @@ for item in Dir.entries($self_defined_param_file_path).sort
   threads_arr << Thread.new{`#{cal_result_exe} | tee -a #{@log_file}`}
   threads_arr << Thread.new{getVsanInfo("#{$output_path_dir}/#{item}-#{time}/")}
   if @debug_mode
-    puts "Unmount Shared Folder from Hosts...",@log_file
-    `ruby /opt/automation/lib/prep-host-vsan-debug.rb #{$output_path_dir}/#{item}-#{time}/#{$share_folder_name} true`    
+    #puts "Unmount Shared Folder from Hosts...",@log_file
+    #`ruby /opt/automation/lib/prep-host-vsan-debug.rb #{$output_path_dir}/#{item}-#{time}/#{$share_folder_name} true`    
+    #_remove_export_info
     #collect support bundle
     end_time = Time.now.to_i
     threads_arr << Thread.new{collectSupportBundle("#{$output_path_dir}/#{item}-#{time}", time, end_time)}

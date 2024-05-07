@@ -901,25 +901,47 @@ def _get_vsan_health_summary(cluster_name = $cluster_name)
   return vsan_health_summary
 end
 
-def _create_shared_folder(test_case_path,share_folder_name)
-  $vsan_debug_sharing_path = test_case_path + "/#{share_folder_name}"
-  Dir.mkdir($vsan_debug_sharing_path) unless File.exists?($vsan_debug_sharing_path)
+def _create_shared_folder(export_path,share_folder_name)
+   $vsan_debug_sharing_path = export_path + "/#{share_folder_name}"
+   if File.exists?($vsan_debug_sharing_path)
+     FileUtils.rm_rf($vsan_debug_sharing_path)
+   end
+   Dir.mkdir($vsan_debug_sharing_path)
+
   return $vsan_debug_sharing_path
 end
 
 def _update_export_info(export_path)
-  content = "#{export_path} *(rw,sync,no_root_squash,no_subtree_check)"
+  content = "#{export_path} *(rw,sync,no_root_squash,no_subtree_check,fsid=#{rand(999)})"
   File.write('/etc/exports',content)
   `exportfs -r`
 end
 
-def _mount_nfs_to_esxi(host)
-  mount_cmd = "localcli storage nfs remove --volume-name hcibench-volume; localcli storage nfs add --host #{$ip_Address} -s #{$vsan_debug_sharing_path} -v hcibench-volume"
+def _remove_export_info(export_path)
+  FileUtils.rm_rf(export_path)
+  `> /etc/exports;exportfs -r`
+end
+
+def _unmount_nfs_from_esxi(host)
+  unmount_cmd = "localcli storage nfs remove --volume-name hcibench-volume"
   host_key = $hosts_credential.has_key?(host) ? host : $hosts_credential.keys[0]
   host_username = $hosts_credential[host_key]["host_username"]
   host_password = $hosts_credential[host_key]["host_password"]
   if ssh_valid(host,host_username,host_password)
-    ssh_cmd(host,host_username,host_password,cmd)
+    ssh_cmd(host,host_username,host_password,unmount_cmd)
+  end
+end
+
+def _mount_nfs_to_esxi(host)
+  mount_cmd = "localcli storage nfs add --host #{$ip_Address} -s #{$vsan_debug_sharing_path} -v hcibench-volume"
+  create_subfolder_cmd = "mkdir /vmfs/volumes/hcibench-volume/#{host}"
+  host_key = $hosts_credential.has_key?(host) ? host : $hosts_credential.keys[0]
+  host_username = $hosts_credential[host_key]["host_username"]
+  host_password = $hosts_credential[host_key]["host_password"]
+  if ssh_valid(host,host_username,host_password)
+    _unmount_nfs_from_esxi(host)
+    ssh_cmd(host,host_username,host_password,mount_cmd)
+    ssh_cmd(host,host_username,host_password,create_subfolder_cmd)
   end
 end
 

@@ -27,7 +27,7 @@ def post_process(host)
   `sed -i '/#{host} /d' /root/.ssh/known_hosts`
   if ssh_valid(host, host_username, host_password)
     puts "Unmounting sharing folder on #{host}", @vsan_debug_log 
-    ssh_cmd(host,host_username,host_password,@unmount_cmd)
+    puts ssh_cmd_with_return(host,host_username,host_password,@unmount_cmd), @vsan_debug_log
   else
     puts "Unable to SSH to #{host}",@vsan_debug_log
     @failure = true
@@ -41,9 +41,11 @@ def run_cmd(host)
   `sed -i '/#{host} /d' /root/.ssh/known_hosts`
   if ssh_valid(host, host_username, host_password)
     puts "Mounting sharing folder on #{host}", @vsan_debug_log
-    ssh_cmd(host,host_username,host_password,@mount_cmd)
+    puts ssh_cmd_with_return(host,host_username,host_password,@unmount_cmd), @vsan_debug_log
+    sleep(5)
+    puts ssh_cmd_with_return(host,host_username,host_password,@mount_cmd), @vsan_debug_log
     puts "Create subfolder in share disk", @vsan_debug_log
-    ssh_cmd(host,host_username,host_password,"mkdir /vmfs/volumes/hcibench-volume/#{host}")
+    puts ssh_cmd_with_return(host,host_username,host_password,"mkdir /vmfs/volumes/hcibench-volume/#{host}"), @vsan_debug_log
   else
     puts "Unable to SSH to #{host}",@vsan_debug_log
     @failure = true
