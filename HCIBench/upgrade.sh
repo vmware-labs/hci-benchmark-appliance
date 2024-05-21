@@ -193,7 +193,8 @@ chmod +x ~/glue.rb
 mv -f $PACKAGES/vmFacilities/* ~/tmp/
 chmod +x ~/tmp/*
 echo "Install pip2"
-tdnf install python-pip -y
+wget https://bootstrap.pypa.io/pip/2.7/get-pip.py
+python2.7 get-pip.py
 echo "install nfs utils"
 tdnf install nfs-utils rpcbind -y
 systemctl start nfs-server rpcbind
