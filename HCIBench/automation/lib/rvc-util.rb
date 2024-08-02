@@ -109,6 +109,7 @@ $output_path_dir = "/opt/output/results/" + $output_path
 $reuse_vm = entry["reuse_vm"]
 $cleanup_vm = entry["cleanup_vm"]
 $workloads = entry["workloads"] || ["4k70r"]
+$latency_target = entry["latency_target"] || "Max"
 $multiwriter = entry["multi_writer"] || false
 #File path def
 $allinonetestingfile = "#{$basedir}/all-in-one-testing.rb"

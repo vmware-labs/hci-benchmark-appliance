@@ -336,7 +336,7 @@ def validate_misc_info
     end
     puts "Hosts credential and SSH service is verified."
   end
-  err_msg "vSAN Datastore should be Included if Easy Run is applied!" if $easy_run and !@has_vsan
+  err_msg "Only one Datastore can be specified with Easy Run enabled, and it has to be vSAN Datastore!" if $easy_run and (!@has_vsan or ($total_datastore > 1))
 
   #Validate staic info
   #Start static if the box is checked
