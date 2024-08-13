@@ -265,6 +265,7 @@ request_body = {
     "vsanDebug": "true",
     "reuseVM": "true",
     "easyRun": "false",
+    "latencyTarget": "Low",
     "workloads": "",
     "vmPrefix": "hci-vdb",
     "vmNum": "20",
@@ -326,9 +327,11 @@ request_body = {
     "reuseVM": "",
     #Easy run, only applicable on vSAN, true/false
     "easyRun": "",
+    #Latency Target, introduced in 2.8.4, choose from Max, Low, Medium or High, please remove this parameter if HCIBench version is lower or equal to 2.8.3
+    "latencyTarget": "",
     #choose one or multiple from 4k70r, 4k100r, 8k50r, 256k0r, must be specified if easyRun set to true e.g. "4k70r,8k50r"
+    #starting from 2.8.4, choose one or multiple from "4 Corner - Random Read with Small Blocksize", "4 Corner - Random Write with Small Blocksize", "4 Corner - Sequential Read with Large Blocksize", "4 Corner - Sequential Write with Large Blocksize", "General Purpose - Random 70/30 with Small Blocksize" or "General Purpose - Random 50/50 with Small Blocksize"
     "workloads": "",
-
     #If easy run set to true, no need to fill up the following parameters
     #VM name prefix, no more than 7 chars
     "vmPrefix": "",
