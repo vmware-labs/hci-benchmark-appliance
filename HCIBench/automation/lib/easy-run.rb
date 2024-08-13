@@ -157,8 +157,8 @@ $latency_target_hash = {
   "High" => {"random" => 5000, "sequential" => 10000}
 }
 
-@data_disk_num = 8
-#@data_disk_num = 4 if $latency_target != "Max"
+#@data_disk_num = 8
+@data_disk_num = 4 if $latency_target != "Max"
 
 if $vsan_version == 1
   @vm_num = num_of_dg * 2
