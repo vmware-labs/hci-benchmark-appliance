@@ -26,7 +26,7 @@ check_command()
 CMD_GEM=gem
 CMD_GIT=git
 CMD_PYTHON=python3
-CMD_PYTHON_PIP=pip3
+CMD_PYTHON_PIP=pip3.7
 CMD_TAR=tar
 
 echo -e "\e[33mChecking required commands\e[0m"
@@ -301,8 +301,8 @@ chmod +x /usr/local/bin/govc
 
 # Update Container
 # **********************************************
-echo 'reseting containers'
-sh ~/tmp/reset-containers
+#echo 'reseting containers'
+#sh ~/tmp/reset-containers
 
 # UPDATE REPOS
 # ***********************************************
