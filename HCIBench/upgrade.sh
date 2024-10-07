@@ -287,7 +287,6 @@ do
 done
 echo "Removing git repository"
 rm -rf "/opt/vmware/rvc/.git"
-echo ""
 
 # START SERVICES
 # **********************************************
