@@ -2208,8 +2208,8 @@ def deploy_test_vms cluster, opts
             :resourcePool => cluster_rp,
             :datastore => datastore,
             :networkMappings => network_mappings,
-            :propertyMappings => property_mappings,
-            :defaultProfile => vmProfile
+            :propertyMappings => property_mappings
+#            :defaultProfile => vmProfile
             )
           vm.UpgradeVM_Task
           $shell.fs.marks['vm_to_add_cpu'] = vm;

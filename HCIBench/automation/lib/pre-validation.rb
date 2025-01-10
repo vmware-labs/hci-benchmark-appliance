@@ -104,8 +104,8 @@ def validate_cluster_info
   puts "Cluster #{$cluster_name} Validated"
   #@cl_path, @cl_path_escape = _get_cl_path
   drs_mode_js = JSON.parse(`govc object.collect -dc "#{Shellwords.escape($dc_name)}" -json -s #{_get_moid("cl",$cluster_name).join(":")} configuration.drsConfig`.chomp)
-  if drs_mode_js[0]["Val"]["Enabled"]
-    @drs_mode = drs_mode_js[0]["Val"]["DefaultVmBehavior"]
+  if drs_mode_js["enabled"]
+    @drs_mode = drs_mode_js["defaultVmBehavior"]
     puts "Cluster #{$cluster_name} has DRS mode: #{@drs_mode}"
     warning_msg "Cluster #{$cluster_name} has DRS mode: #{@drs_mode}, which may cause VMs distribution imbalance, recommend to disable DRS before running HCIBench testing." if @drs_mode == "fullyAutomated"
   else
@@ -114,7 +114,7 @@ def validate_cluster_info
   puts "Validating If Any Hosts in Cluster #{$cluster_name} for deployment is in Maintainance Mode..."
   deploy_hosts_list = _get_deploy_hosts_list
   deploy_hosts_list.each do |host|
-    err_msg "Host #{host} is either in maintainance mode or disconnected, please remove it from hosts list" if not _host_healthy(_get_moid("hs",host)[1]) and $all_hosts.include? host and $deploy_on_hosts 
+    err_msg "Host #{host} is either in maintainance mode or disconnected, please remove it from hosts list" if not _host_healthy(_get_moid("hs",host)[1]) and $deploy_on_hosts and all_hosts.include? host 
     puts "Host #{host} is in maintainance mode" if `govc object.collect -dc "#{Shellwords.escape($dc_name)}" -s #{_get_moid("hs",host).join(":")} runtime.inMaintenanceMode`.chomp == "true"
   end
   #puts "All the Hosts in Cluster #{$cluster_name} are not in Maitainance Mode"
@@ -208,7 +208,7 @@ def validate_datastore_info
 
       puts "Checking Datastore #{datastore_name} type..."
       ds_type_js = JSON.parse(`govc object.collect -dc "#{Shellwords.escape($dc_name)}" -json #{_get_moid("ds",datastore_name).join(':')} summary.type`.chomp)
-      ds_type = ds_type_js[0]["Val"]
+      ds_type = ds_type_js[0]["val"]
       @has_vsan = true if ds_type == 'vsan'
       puts "Datastore #{datastore_name} type is #{ds_type}"
 
@@ -225,6 +225,15 @@ def validate_datastore_info
         puts "Datastore #{datastore_name} is accessible from hosts #{accessible_hosts.join(', ')}"
       end
     end
+  end
+end
+
+def validate_storage_policy
+  if $storage_policy and not $storage_policy.empty? and not $storage_policy.strip.empty?
+      puts "Validating storage policy #{$storage_policy}..."
+      compliant_ids = _get_compliant_datastore_ids_escape($storage_policy) || []
+      err_msg "Unable to find the storage policy #{$storage_policy} or Unable to find compliant datastores of policy #{$storage_policy}" if compliant_ids == []
+      err_msg "The storage policy #{$storage_policy} is not compatible with any of the datastores specified." if (@ds_ids & compliant_ids) == []
   end
 end
 
@@ -336,7 +345,7 @@ def validate_misc_info
     end
     puts "Hosts credential and SSH service is verified."
   end
-  err_msg "Only one Datastore can be specified with Easy Run enabled, and it has to be vSAN Datastore!" if $easy_run and (!@has_vsan or ($total_datastore > 1))
+  err_msg "Only one Datastore can be specified with Easy Run enabled!" if $easy_run and ($total_datastore > 1)
 
   #Validate staic info
   #Start static if the box is checked
@@ -651,7 +660,11 @@ validate_rp_info
 validate_vm_folder_info
 validate_network_info
 validate_datastore_info
-validate_vsan_info if @has_vsan
+if @has_vsan
+  validate_vsan_info 
+else
+  validate_storage_policy
+end
 validate_misc_info
 
 validate_cluster_connection

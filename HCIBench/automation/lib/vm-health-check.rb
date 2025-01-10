@@ -100,17 +100,17 @@ $datastore_names.each do |datastore|
   good_vms_moid.each do |vm_moid|
     hash_arr = _save_str_to_hash_arr `govc object.collect -dc "#{Shellwords.escape($dc_name)}" -json "#{vm_moid}" config.hardware.device`
     hash_arr.each do |hash_d|
-      hash_d[0]["Val"]["VirtualDevice"].each do |dev|
-        if dev["DeviceInfo"]["Label"].include? "Hard disk"
-          if dev["Backing"]["Sharing"] == "sharingMultiWriter" #either sharingNone or sharingMultiWriter
+      hash_d[0]["val"]["_value"].each do |dev|
+        if dev["deviceInfo"]["label"].include? "Hard disk"
+          if dev["backing"]["sharing"] == "sharingMultiWriter" #either sharingNone or sharingMultiWriter
             @multiwriter_disks_num += 1
-            @multiwriter_disks << dev["Backing"]["FileName"] if not @multiwriter_disks.include? dev["Backing"]["FileName"]
+            @multiwriter_disks << dev["backing"]["fileName"] if not @multiwriter_disks.include? dev["backing"]["fileName"]
           end
         end
       end
     end
   end
-  if $multiwriter
+  if $multiwriter and not $easy_run
     failure_handler "Found #{@multiwriter_disks.size} multi-writer disks in #{good_vms_moid.size} VMs, which is different from the configuration" if @multiwriter_disks.size != $number_data_disk or @multiwriter_disks_num != ($number_data_disk * $vm_num)
   else
     failure_handler "Found #{@multiwriter_disks_num} multi-writer disks, which is incompatible" if @multiwriter_disks_num > 0
@@ -127,7 +127,8 @@ end
 begin
   Timeout::timeout(720) do
     puts "Rebooting All the Client VMs...",@vm_health_check_file
-    puts `echo #{vms_moid_to_use.join(" ")} | xargs govc vm.power -dc "#{Shellwords.escape($dc_name)}" -M -moid -r`,@vm_health_check_file
+    puts `echo #{vms_moid_to_use.join(" ")}`
+    puts `echo #{vms_moid_to_use.join(" ")} | xargs govc vm.power -dc "#{Shellwords.escape($dc_name)}" -M -r`,@vm_health_check_file
     #puts `echo #{vms_moid_to_use.join(" ")} | xargs govc vm.ip -v4 -dc "#{Shellwords.escape($dc_name)}" -moid -wait 120s`,@vm_health_check_file
     puts "All the Client VMs Rebooted, wait 120 seconds...",@vm_health_check_file
     sleep(120)

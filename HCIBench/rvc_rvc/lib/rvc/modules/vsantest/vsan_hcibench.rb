@@ -1993,6 +1993,61 @@ def _fetch_disk_stats obj, metrics, instances, opts = {}
   out
 end
 
+opts :get_vsan_disks_stats do
+  summary "show vSAN disks stats"
+  arg :cluster, nil, :lookup => VIM::ComputeResource
+end
+
+def get_vsan_disks_stats cluster,
+  host = cluster.host[0]
+  begin
+    json = host.configManager.vsanInternalSystem.QueryPhysicalVsanDisks(:props => [])
+  rescue
+    puts "Not VSAN"
+    return
+  end
+  hash = JSON.parse(json)
+  vals = hash.values
+  vsan_version = 1
+  cache_size = 0
+  cache_num = 0
+  capacity_num = 0
+  capacity_size = 0
+  capacity_used = 0
+  dedupe_scope = 0
+  at_rest_encryption = false
+  in_transit_encryption = false
+
+  vsan_type = "Hybrid"
+  vals.each do |val|
+    vsan_version = 2 if not val.has_key?("isSsd")
+    if vsan_version == 2 or (vsan_version == 1 and val["isSsd"] == 1 and val["isAllFlash"] == 1)
+      vsan_type = "All-Flash" 
+    end
+    if vsan_version == 1 and val["isSsd"] == 1 
+      dedupe_scope = val["dedupScope"]
+      cache_size = cache_size + val["ssdCapacity"]
+      cache_num = cache_num + 1
+    end
+    if vsan_version == 2 or (vsan_version == 1 and val["isSsd"] == 0)
+      capacity_num = capacity_num + 1
+      capacity_size = capacity_size + val["capacity"]
+      capacity_used = capacity_used + val["capacityUsed"] 
+    end
+  end
+  vsan_stats = {}
+  vsan_stats["vsan_version"] = vsan_version
+  vsan_stats["vsan_type"] = vsan_type
+  vsan_stats["dedupe_scope"] = dedupe_scope
+  vsan_stats["cache_size"] = cache_size/(1024*1024*1024)
+  vsan_stats["cache_num"] = cache_num
+  vsan_stats["capacity_num"] = capacity_num
+  vsan_stats["capacity_size"] = capacity_size/(1024*1024*1024)
+  vsan_stats["capacity_used"] = capacity_used/(1024*1024*1024)
+  puts vsan_stats
+  return vsan_stats
+end
+
 opts :vsan_type do
   summary "Show type of VSAN: All-Flash or Hybrid"
   arg :cluster, nil, :lookup => VIM::ComputeResource

@@ -24,9 +24,9 @@ begin
 		host_moid = _get_moid("hs",host).join(":")
 		tnode << Thread.new{
 		if $multiwriter
-			puts `govc find -type m -i -dc "#{Shellwords.escape($dc_name)}" . -runtime.host "#{host_moid}" -name "#{$vm_prefix}-*" | xargs govc vm.power -dc "#{Shellwords.escape($dc_name)}" -off -moid`, @vm_cleanup_log
+			puts `govc find -type m -i -dc "#{Shellwords.escape($dc_name)}" . -runtime.host "#{host_moid}" -name "#{$vm_prefix}-*" | { read -N1 line && { echo -n "$line"; cat; } | xargs govc vm.power -dc "#{Shellwords.escape($dc_name)}" -off;} `, @vm_cleanup_log
 		else	
-			puts `govc find -type m -i -dc "#{Shellwords.escape($dc_name)}" . -runtime.host "#{host_moid}" -name "#{$vm_prefix}-*" | xargs govc vm.destroy -dc "#{Shellwords.escape($dc_name)}" -m`, @vm_cleanup_log
+			puts `govc find -type m -i -dc "#{Shellwords.escape($dc_name)}" . -runtime.host "#{host_moid}" -name "#{$vm_prefix}-*" | { read -N1 line && { echo -n "$line"; cat; } | xargs govc vm.destroy -dc "#{Shellwords.escape($dc_name)}";} `, @vm_cleanup_log
 		end
 		}
 	end

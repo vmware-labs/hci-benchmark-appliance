@@ -9,7 +9,7 @@ begin
 	_get_hosts_list.each do |host|
 		host_moid = _get_moid("hs",host).join(":")
 		tnode << Thread.new{
-			puts `govc find -type m -i -dc "#{Shellwords.escape($dc_name)}" . -runtime.host "#{host_moid}" -name "#{$tvm_prefix}-*" | xargs govc vm.destroy -dc "#{Shellwords.escape($dc_name)}" -m`, @tvm_cleanup_log
+			puts `govc find -type m -i -dc "#{Shellwords.escape($dc_name)}" . -runtime.host "#{host_moid}" -name "#{$tvm_prefix}-*" | { read -N1 line && { echo -n "$line"; cat; }| xargs govc vm.destroy -dc "#{Shellwords.escape($dc_name)}"; }`, @tvm_cleanup_log
 		}
 	end
 	tnode.each{|t|t.join}

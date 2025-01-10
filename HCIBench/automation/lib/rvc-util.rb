@@ -255,9 +255,9 @@ def _get_folder_moid(folder_name, parent_moid = "")
 end
 
 def _host_healthy host_moid
- connect = JSON.parse(`govc object.collect -json -dc "#{Shellwords.escape($dc_name)}" -s "HostSystem:#{host_moid}" runtime.connectionState`)[0]["Val"]
- maintainance = JSON.parse(`govc object.collect -json -dc "#{Shellwords.escape($dc_name)}" -s "HostSystem:#{host_moid}" runtime.inMaintenanceMode`)[0]["Val"]
- return (connect == "connected" and maintainance == false) ? true : false
+ connect = JSON.parse(`govc object.collect -json -dc "#{Shellwords.escape($dc_name)}" -s "HostSystem:#{host_moid}" runtime.connectionState`)
+ maintainance = `govc object.collect -json -dc "#{Shellwords.escape($dc_name)}" -s "HostSystem:#{host_moid}" runtime.inMaintenanceMode`.chomp
+ return (connect == "connected" and maintainance == "false") ? true : false
 end
 
 def _multi_json_string str
@@ -289,18 +289,18 @@ def _get_moid object_type, object_name
   types = {"dc" => "d", "rp" => "p", "ds" => "s", "nt" => "n", "fd" => "f", "cl" => "c", "hs" => "h"}
   path = "./"
   path = "/" if object_type == "dc"
-  return_value = `govc object.collect -dc "#{Shellwords.escape($dc_name)}" -s -json -type #{types[object_type]} #{path} -name "#{object_name_escaped}"`.chomp
+  return_value = `govc object.collect -dc "#{Shellwords.escape($dc_name)}" -json -type #{types[object_type]} #{path} -name "#{object_name_escaped}"`.chomp
   if not _is_duplicated(object_type, object_name)[0]
     obj_js = JSON.parse(return_value)
-    obj_type = obj_js["Obj"]["Type"]
-    obj_id = obj_js["Obj"]["Value"]
+    obj_type = obj_js["obj"]["type"]
+    obj_id = obj_js["obj"]["value"]
     return obj_type,obj_id
   elsif _multi_json_string(return_value)
     objs = []
     _parse_multi_json(return_value).each do |object|
       obj_js = JSON.parse(object)
-      obj_type = obj_js["Obj"]["Type"]
-      obj_id = obj_js["Obj"]["Value"]
+      obj_type = obj_js["obj"]["type"]
+      obj_id = obj_js["obj"]["value"]
       objs.push([obj_type,obj_id])
     end
     return objs
@@ -403,11 +403,13 @@ end
 def _get_hosts_list_by_ds_name(datastore_name)
   hosts_list = []
   host_system_hash = JSON.parse(`govc object.collect -json -s #{_get_moid("ds",datastore_name).join(":")} host`.chomp)
-  host_system_hash[0]["Val"]["DatastoreHostMount"].each do |host_system|
-    if host_system["MountInfo"]["Accessible"]
-      obj_type = host_system["Key"]["Type"]
-      obj_id = host_system["Key"]["Value"]
-      hosts_list << _get_name(obj_type, obj_id) if _host_healthy(obj_id)
+  host_system_hash.each do |host_system|
+    if host_system["mountInfo"]["accessible"]
+      obj_type = host_system["key"]["type"]
+      obj_id = host_system["key"]["value"]
+      if _host_healthy(obj_id)
+        hosts_list << _get_name(obj_type, obj_id) 
+      end
     end
   end
   return hosts_list
@@ -448,7 +450,7 @@ end
 
 def _is_vsan(datastore_name)
   ds_type_js = JSON.parse(`govc object.collect -dc "#{Shellwords.escape($dc_name)}" -json #{_get_moid("ds",datastore_name).join(':')} summary.type`.chomp)
-  ds_type = ds_type_js[0]["Val"]
+  ds_type = ds_type_js[0]["val"]
   return (ds_type == "vsan")
 end
 
@@ -591,12 +593,18 @@ end
 #Would only called by pre-validation, 
 def _get_num_of_vm_to_deploy
   return $vm_num if not $easy_run
-  vsan_stats_hash = _get_vsan_disk_stats(_pick_vsan_cluster_for_easy_run)
-  num_of_dg = vsan_stats_hash["Total number of Disk Groups"]
-  $cl_path, $cl_path_escape = _get_cl_path if $cl_path == ""
-  witness = `rvc #{$vc_rvc} --path #{$cl_path_escape} -c 'vsantest.vsan_hcibench.cluster_info .' -c 'exit' -q | grep -E "^Witness Host:"`.chomp
-  num_of_dg -= 1 if witness != ""
-  $vm_num = $vsan_version == 1 ? num_of_dg * 2 * $total_datastore : _get_deploy_hosts_list.count * 4 * $total_datastore
+  vsan_datastores = _get_vsandatastore_in_cluster
+  test_vsan = (vsan_datastores == {} or (vsan_datastores.keys & $datastore_names).empty?) ? false : true
+  if test_vsan
+    vsan_stats_hash = _get_vsan_disk_stats(_pick_vsan_cluster_for_easy_run)
+    num_of_dg = vsan_stats_hash["Total number of Disk Groups"]
+    $cl_path, $cl_path_escape = _get_cl_path if $cl_path == ""
+    witness = `rvc #{$vc_rvc} --path #{$cl_path_escape} -c 'vsantest.vsan_hcibench.cluster_info .' -c 'exit' -q | grep -E "^Witness Host:"`.chomp
+    num_of_dg -= 1 if witness != ""
+    $vm_num = $vsan_version == 1 ? num_of_dg * 2 : (_get_hosts_list & _get_hosts_list_by_ds_name($datastore_names[0])).count * 2 
+  else
+    $vm_num = (_get_hosts_list & _get_hosts_list_by_ds_name($datastore_names[0])).count * 2
+  end
   return $vm_num 
 end
 
@@ -621,9 +629,9 @@ def _is_ds_local_to_cluster(datastore_name)
   datastore_alias_id =`govc object.collect -dc "#{Shellwords.escape($dc_name)}" -s #{_get_moid("ds",datastore_name).join(":")} info.aliasOf`.chomp.delete('-')
   datastore_container_id = `govc object.collect -dc "#{Shellwords.escape($dc_name)}" -s #{_get_moid("ds",datastore_name).join(":")} info.containerId`.chomp.delete('-')
   cluster_json = JSON.parse(`govc object.collect -json -s #{_get_moid("cl",$cluster_name).join(":")} configurationEx`.chomp)  
-  if cluster_json[0]["Val"]["VsanHostConfig"][0]["ClusterInfo"]# ["Enabled"] 
-    $compute_only_cluster = $cluster_name if not cluster_json[0]["Val"]["VsanHostConfig"][0]["Enabled"]
-    cluster_id = cluster_json[0]["Val"]["VsanHostConfig"][0]["ClusterInfo"]["Uuid"].delete('-')
+  if cluster_json["vsanHostConfig"][0]["clusterInfo"]["enabled"] 
+    $compute_only_cluster = $cluster_name if not cluster_json["vsanHostConfig"][0]["enabled"]
+    cluster_id = cluster_json["vsanHostConfig"][0]["clusterInfo"]["uuid"].delete('-')
     return (cluster_id == datastore_container_id or cluster_id == datastore_alias_id)
   else
     return true
@@ -648,7 +656,7 @@ end
 # get compliant [ds] of the storage policy
 def _get_compliant_datastore_ids_escape(storage_policy = $storage_policy)
   policy_js = JSON.parse(`govc storage.policy.info -s -json $'#{storage_policy.gsub("'",%q(\\\'))}'`.chomp)
-  compliant_ds_names = policy_js["Policies"][0]["CompatibleDatastores"] || []
+  compliant_ds_names = policy_js["policies"][0]["compatibleDatastores"] || []
   return compliant_ds_names.map!{|ds|_get_ds_id_by_name(ds)}
 end
 
@@ -703,24 +711,11 @@ def _get_all_vsan_clusters
   return $all_vsan_clusters
 end
 
-def _get_vsan_stats(datastore_name)
-  datastore_full_moid = _get_moid("ds",datastore_name).join(":")
-  vsan_info_json = JSON.parse(`govc datastore.vsan.info -json -dc "#{Shellwords.escape($dc_name)}" -m #{datastore_full_moid}`.chomp)
-  vsan_default_policy_id = vsan_info_json["DatastoreDefaultProfileId"][datastore_full_moid][0]
-  vsan_detail = {}
-  if vsan_info_json["DatastoreDefaultProfileId"][datastore_full_moid][1] != ""
-    vsan_detail = JSON.parse(vsan_info_json["DatastoreDefaultProfileId"][datastore_full_moid][1])
-  end
-  vsan_cluster_name = vsan_info_json["DatastoreDefaultProfileId"][datastore_full_moid][2]
-  return vsan_default_policy_id, vsan_detail, vsan_cluster_name
-end
-
 #returning policy_name, rules in []
 def _get_vsan_default_policy(datastore_name)
-  #vsan_default_policy_id = `rvc #{$vc_rvc} --path #{_get_ds_path_escape(datastore_name)[1]} -c 'vsantest.spbm_hcibench.get_vsandatastore_default_policy .' -c 'exit' -q | grep "^ProfileId" | awk '{print $2}'`.chomp
-  vsan_default_policy_id, _, _ = _get_vsan_stats(datastore_name)
+  vsan_default_policy_id = `rvc #{$vc_rvc} --path #{_get_ds_path_escape(datastore_name)[1]} -c 'vsantest.spbm_hcibench.get_vsandatastore_default_policy .' -c 'exit' -q | grep "^ProfileId" | awk '{print $2}'`.chomp
   default_policy_hash = JSON.parse(`govc storage.policy.ls -json #{vsan_default_policy_id}`.chomp)
-  policy_name = default_policy_hash["Profile"][0]["Name"]
+  policy_name = default_policy_hash["profile"][0]["name"]
   return policy_name, _get_storage_policy_rules(policy_name)
 end
 
@@ -728,10 +723,10 @@ end
 def _get_storage_policy_rules(storage_policy = $storage_policy)
   rules = []
   policy_js = JSON.parse(`govc storage.policy.info -s -json $'#{storage_policy.gsub("'",%q(\\\'))}'`.chomp)
-  rules_js = policy_js["Policies"][0]["Profile"]["Constraints"]["SubProfiles"][0]["Capability"]
+  rules_js = policy_js["policies"][0]["profile"]["constraints"]["subProfiles"][0]["capability"]
   rules_js.each do |rule_json|
-    rule_json['Constraint'][0]['PropertyInstance'].each do |prop_ins|
-      rules << "#{rule_json['Id']['Namespace']}.#{rule_json['Id']['Id']}.#{prop_ins['Id']}: #{prop_ins['Value']}"
+    rule_json['constraint'][0]['propertyInstance'].each do |prop_ins|
+      rules << "#{rule_json['id']['namespace']}.#{rule_json['id']['id']}.#{prop_ins['id']}: #{prop_ins['value']}"
     end
     #rules << "#{rule_json['Id']['Namespace']}.#{rule_json['Id']['Id']}: #{rule_json['Constraint'][0]['PropertyInstance'][0]['Value']}"
   end
@@ -749,41 +744,25 @@ end
 
 #returning vsan disk stats detail table stats, sum stats
 def _get_vsan_disk_stats(cluster_name = $cluster_name)
-  cluster_moid = _get_moid('cl',cluster_name).join(':')
-  `govc cluster.vsan.info -json -dc "#{Shellwords.escape($dc_name)}" -m "#{cluster_moid}" > null 2>&1`
+  cl_path, cl_path_escape = _get_cl_path(cluster_name)
+  vsan_disk_stats_hash = eval(`rvc #{$vc_rvc} --path #{cl_path_escape} -c "vsantest.vsan_hcibench.get_vsan_disks_stats ." -c 'exit' -q`.chomp)
+  `govc vsan.info -json -dc "#{Shellwords.escape($dc_name)}" "#{Shellwords.escape(cluster_name)}" > null 2>&1`
   return {} if $? != 0
-  vsan_stats_hash = JSON.parse(`govc cluster.vsan.info -json -dc "#{Shellwords.escape($dc_name)}" -m "#{cluster_moid}"`.chomp)
-  disks = JSON.parse(vsan_stats_hash["ClusterVsanInfo"][cluster_moid])
-  cache_num = 0
-  cache_size = 0
-  capacity_num = 0
-  capacity_size = 0
-  total_usable_capacity = 0
-  at_rest_encryption = false
-  in_transit_encryption = false
-  type = 'Hybrid'
-  dedupe_scope = 0
-  disks.keys.each do |disk|
-    if disks[disk]["isSsd"] == 1
-      cache_size += disks[disk]["ssdCapacity"]/1024**3
-      cache_num += 1
-      type = "All-Flash" if disks[disk]["isAllFlash"] == 1
-      dedupe_scope = disks[disk]["dedupScope"] if type == "All-Flash"
-    else
-      capacity_num += 1
-      capacity_size += disks[disk]["capacity"]/1024**3
-      total_usable_capacity += (disks[disk]["capacity"] - disks[disk]["capacityUsed"])/1024**3
-    end
-  end  
-  vsan_conf = vsan_stats_hash["ClusterVsanConf"][cluster_moid]
-  perfsvc = vsan_conf["PerfsvcConfig"]["Enabled"]
-  verbose_mode = false
-  if perfsvc
-    verbose_mode = vsan_conf["PerfsvcConfig"]["VerboseMode"]
-  end
-  at_rest_encryption = true if vsan_conf["DataEncryptionConfig"] and vsan_conf["DataEncryptionConfig"]["EncryptionEnabled"]
-  in_transit_encryption = true if vsan_conf["DataInTransitEncryptionConfig"] and vsan_conf["DataInTransitEncryptionConfig"]["Enabled"]
-  $vsan_version = 2 if cache_num == 0
+  vsan_stats_hash = JSON.parse(`govc vsan.info -json -dc "#{Shellwords.escape($dc_name)}" "#{Shellwords.escape(cluster_name)}"`.chomp)
+  cluster_vsan_hash = vsan_stats_hash["clusters"][0]
+  cache_num = vsan_disk_stats_hash["cache_num"]
+  cache_size = vsan_disk_stats_hash["cache_size"]
+  capacity_num = vsan_disk_stats_hash["capacity_num"]
+  capacity_size = vsan_disk_stats_hash["capacity_size"]
+  total_usable_capacity = vsan_disk_stats_hash["capacity_size"] - vsan_disk_stats_hash["capacity_used"]
+  at_rest_encryption = (cluster_vsan_hash["info"]["DataEncryptionConfig"]["EncryptionEnabled"].nil? or cluster_vsan_hash["info"]["DataEncryptionConfig"]["EncryptionEnabled"] == false) ? false : true 
+  in_transit_encryption = (cluster_vsan_hash["info"]["DataInTransitEncryptionConfig"]["Enabled"].nil? or cluster_vsan_hash["info"]["DataInTransitEncryptionConfig"]["Enabled"] == false) ? false : true
+  type = vsan_disk_stats_hash["vsan_type"] 
+  dedupe_scope = vsan_disk_stats_hash["dedupe_scope"]
+  perfsvc = cluster_vsan_hash["info"]["PerfsvcConfig"]["Enabled"] 
+  verbose_mode = perfsvc ? cluster_vsan_hash["info"]["PerfsvcConfig"]["VerboseMode"] : false
+  $vsan_version = vsan_disk_stats_hash["vsan_version"]
+ 
   return {"PerfSvc"=> perfsvc, "PerfSvc_verbose" => verbose_mode, "Total_Cache_Size"=> cache_size, "Total number of Disk Groups"=> cache_num, "Total number of Capacity Drives"=> capacity_num, "Total_Capacity_Size"=>capacity_size, "Total_Usable_Capacity"=>total_usable_capacity, "vSAN type"=>type,"Dedupe Scope"=> dedupe_scope, "Data at-Rest Encryption" => at_rest_encryption, "Data in-Transit Encryption" => in_transit_encryption} 
 end
 
