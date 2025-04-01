@@ -100,14 +100,37 @@ class VIM::VirtualMachine
     end
   end
 
-  def getresults path,tool
+  def run_cmd_with_return cmd
+    return_stdout = ""
+    begin
+      self.ssh do |ssh|
+        return_stdout = ssh.exec!(cmd.to_s)
+        ssh.close
+      end
+    rescue Net::SSH::ConnectionTimeout
+      puts "Timed out"
+    rescue Timeout::Error
+      puts "Timed out"
+    rescue Errno::EHOSTUNREACH
+      puts "Host unreachable"
+    rescue Errno::ECONNREFUSED
+      puts "Connection refused"
+    rescue Net::SSH::AuthenticationFailed
+      puts "Authentication failure"
+    rescue Exception => e
+      puts "#{e.class}: #{e.message}"
+    end
+    return return_stdout
+  end
+
+  def getresults path,tool,filePrefix
     download_path = ""
     download_type = ""
     if tool == "vdbench"
-      download_path = "/root/vdbench/results.txt"
+      download_path = "/root/vdbench/#{filePrefix}.txt"
       download_type = "txt"
     elsif tool == "fio"
-      download_path = "/root/fio/results.json"
+      download_path = "/root/fio/#{filePrefix}.json"
       download_type = "json"
     end
     self.ssh do |ssh|
@@ -140,6 +163,8 @@ class VIM::VirtualMachine
     vmname = Shellwords.escape(self.name.gsub(".","-").gsub(" ","_"))
     duration_var_vdb = ""
     duration_var_fio = ""
+    filePrefix = "#{output_folder_name}-#{testcase_name}-#{vmname}-results"
+    cmd_check_process = "ps -ef | grep \"#{opts[:tool]} .*#{filePrefix}\" | grep -v grep | wc -l"
     cmds = []
     if opts[:duration] != 0
       duration_var_vdb = "-e #{opts[:duration]}"
@@ -150,25 +175,33 @@ class VIM::VirtualMachine
                "gip=`netstat -nptW | grep 'sshd' | awk '{print $5}' | rev | cut -d ':' -f2- | rev`; \
         cd /root/vdbench; export CARBON_HOST=${gip}; \
         export METRIC_PREFIX='vdbench.#{output_folder_name}.#{testcase_name}.#{vmname}'; \
-        nohup ./vdbench -f #{paramFileName} #{duration_var_vdb} > results.txt 2>&1 & \
-        python /root/graphites/vdbench_graphite.py /root/vdbench/results.txt > vdbench.graphite.log 2>&1"
+        nohup ./vdbench -f #{paramFileName} #{duration_var_vdb} > #{filePrefix}.txt 2>&1 & \
+        python /root/graphites/vdbench_graphite.py /root/vdbench/#{filePrefix}.txt > vdbench.graphite.log 2>&1"
                ]
     elsif opts[:tool] == "fio"
       cmds = [
         "gip=`netstat -nptW | grep 'sshd' | awk '{print $5}' | rev | cut -d ':' -f2- | rev`; \
         cd /root/fio; export CARBON_HOST=${gip}; \
         export METRIC_PREFIX='fio.#{output_folder_name}.#{testcase_name}.#{vmname}'; \
-        > /root/fio/results.json;"
+        > /root/fio/#{filePrefix}.json;"
       ]
       if opts[:duration] != 0
         cmds[0] += "sed 's/runtime/#runtime/g' #{paramFileName} -i;"
       end
       cmds[0] += "nohup ./fio -f #{paramFileName} #{duration_var_fio} --status-interval=5 --lat_percentiles 1 \
-      --output results.json --output-format=json > /root/fio/fio.log 2>&1 & sleep 2;\
-      python /root/graphites/fio_graphite.py /root/fio/results.json > fio.graphite.log 2>&1"
+      --output #{filePrefix}.json --output-format=json > /root/fio/fio.log 2>&1 & sleep 2;\
+      python /root/graphites/fio_graphite.py /root/fio/#{filePrefix}.json > fio.graphite.log 2>&1"
     end
-    self.runcmds(cmds);
-    self.getresults(path,opts[:tool]);
+    retries = 0
+    begin
+      self.runcmds(cmds);
+    rescue Exception => e
+      puts "#{Time.now}: #{vmname}: Exception #{e}"
+      sleep 10
+      retry if (retries += 1 ) < 3
+    ensure
+      self.getresults(path,opts[:tool],filePrefix) if run_cmd_with_return(cmd_check_process).to_i == 0 
+    end
   end
 
   def runio path, opts = {}
@@ -1909,6 +1942,7 @@ opts :deploy_tvm do
   opt :no_thin, "Don't use thin provisioning", :default => false, :type => :boolean
   opt :name_prefix, "Name prefix", :default => "hci-tvm"
   opt :num_vms, "number of VMs to deploy", :default => 10, :type => :integer
+  opt :storage_policy, "the name of policy", :type => :string
   opt :static, "use dhcp or static ip", :default => false, :type => :boolean
   opt :ip, "starting ip address assigned to the vm", :type => :string
   opt :ip_size, "network size used by the vm", :type => :integer
@@ -1966,6 +2000,11 @@ def deploy_tvm cluster, opts
     end
   end
 
+  vmProfile = nil
+  if opts[:storage_policy] != ""
+    vmProfile = [VIM::VirtualMachineDefinedProfileSpec(:profileId => get_policy_id_by_name(dc,opts[:storage_policy]))]
+  end
+
   if isHostd
     begin
       vm = conn.serviceContent.ovfManager.deployOVF(
@@ -1976,7 +2015,8 @@ def deploy_tvm cluster, opts
         :resourcePool => cluster_rp,
         :datastore => datastore,
         :networkMappings => network_mappings,
-        :propertyMappings => property_mappings
+        :propertyMappings => property_mappings,
+	:defaultProfile => vmProfile
         )
       vms << vm
     rescue Exception => ex
@@ -2017,7 +2057,8 @@ def deploy_tvm cluster, opts
           :resourcePool => cluster_rp,
           :datastore => datastore,
           :networkMappings => network_mappings,
-          :propertyMappings => property_mappings
+          :propertyMappings => property_mappings,
+	  :defaultProfile => vmProfile
           )
       rescue Exception => ex
         puts ex

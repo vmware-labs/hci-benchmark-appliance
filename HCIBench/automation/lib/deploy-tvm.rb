@@ -37,19 +37,31 @@ temp_hash.keys.each do |ds|
   end
 end
 
+@compliant_ds_ids = []
+if $storage_policy and not $storage_policy.empty? and not $storage_policy.strip.empty?
+  @compliant_ds_ids = _get_compliant_datastore_ids_escape
+  if @compliant_ds_ids == []
+    puts "Cant find the storage policy #{$storage_policy} or Can't find compliant datastore for policy #{$storage_policy}",@log_file
+    exit(251)
+  end
+end
+
 def deployOnHost(datastore, vm_num, ip, host)
   ds_path = _get_ds_path_escape(datastore)[0]
   ds_path_gsub = ds_path.gsub('"', '\"')
   prefix = "hci-tvm-#{host}".gsub('"', '\"')
-
+  storage_policy = ""
+  if @compliant_ds_ids.include? _get_ds_id_by_name(datastore)
+    storage_policy = $storage_policy
+  end
   if $static_enabled
     deploy_action_escape = Shellwords.escape(%{vsantest.perf.deploy_tvm . --resource-pool #{$resource_pool_name_escape} \
      --vm-folder #{$vm_folder_name} --datastore "#{ds_path_gsub}" --network ~dest_network --num-vms #{vm_num} \
-     --name-prefix "#{prefix}" --static --ip #{ip} --ip-size #{$static_ip_size} --host "#{host}"})
+     --name-prefix "#{prefix}" --static --ip #{ip} --ip-size #{$static_ip_size} --storage-policy "#{storage_policy}" --host "#{host}"})
   else
     deploy_action_escape = Shellwords.escape(%{vsantest.perf.deploy_tvm . --resource-pool #{$resource_pool_name_escape} \
       --vm-folder #{$vm_folder_name} --datastore "#{ds_path_gsub}" --network ~dest_network --num-vms #{vm_num} \
-      --name-prefix "#{prefix}" --host "#{host}"})
+      --name-prefix "#{prefix}" --storage-policy "#{storage_policy}" --host "#{host}"})
   end
   log_file = @log_file + "-#{host}" + ".log"
   if !system("rvc #{$vc_rvc} --path #{$cl_path_escape} -c #{@get_network_instance_escape} -c #{deploy_action_escape} \
