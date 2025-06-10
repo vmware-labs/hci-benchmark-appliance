@@ -27,7 +27,7 @@ HCIBench can assign static IP address.
 You can choose to deploy HCIBench appliance OVA to vSphere environment if there's no existing HCIBench instance running in your environment 
 
 1. Download HCIBench OVA from [releases](https://github.com/vmware-labs/hci-benchmark-appliance/releases)
-2. Deploy HCIBench OVA into your vSphere environment. Refer to [HCIBench User Guide](HCIBench_User_Guide_2.8.1.pdf) for more details
+2. Deploy HCIBench OVA into your vSphere environment. Refer to [HCIBench User Guide](HCIBench_User_Guide.pdf) for more details
 3. Configure the HCIBench testing and start testing
 
 ### Upgrade
@@ -47,7 +47,7 @@ cd /root/ && wget https://github.com/vmware-labs/hci-benchmark-appliance/archive
 Then the logs, results and configuration files will be preserved after upgrading to the latest build.
 
 ## Documentation
-[HCIBench User Guide](HCIBench_User_Guide_2.8.1.pdf)
+[HCIBench User Guide](HCIBench_User_Guide.pdf)
 
 ## Contributing
 
