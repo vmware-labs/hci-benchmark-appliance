@@ -75,18 +75,18 @@ else
           throughput[i] = throughput[i] / 1024
           r_lat[i] = r_lat[i] / ((num_vm - vm_finish_early) * 1000000)
           w_lat[i] = w_lat[i] / ((num_vm - vm_finish_early) * 1000000)
-          r_lat_95[i] = r_lat_95[i] / ((num_vm - vm_finish_early) * 1000000)
-          w_lat_95[i] = w_lat_95[i] / ((num_vm - vm_finish_early) * 1000000)
+          r_lat_95[i] = r_lat_95[i] / ((num_vm - vm_finish_early) * 1000000.0)
+          w_lat_95[i] = w_lat_95[i] / ((num_vm - vm_finish_early) * 1000000.0)
           puts "There are #{vm_finish_early} VMs finished testing early, those VMs are not used for summarizing results", resfile if vm_finish_early > 0
           puts "=============================", resfile
           puts "JOB_NAME\t= #{job_names[i]}", resfile
           puts "VMs\t\t= #{num_vm-vm_finish_early}", resfile
           puts "IOPS\t\t= #{'%.2f'% iops[i]} IO/S", resfile
           puts "THROUGHPUT\t= #{'%.2f'% throughput[i]} MB/s", resfile
-          puts "R_LATENCY\t= #{'%.2f'% r_lat[i]} ms", resfile
-          puts "W_LATENCY\t= #{'%.2f'% w_lat[i]} ms", resfile
-          puts "95%tile_R_LAT\t= #{'%.2f'% r_lat_95[i]} ms", resfile
-          puts "95%tile_W_LAT\t= #{'%.2f'% w_lat_95[i]} ms", resfile
+          puts "R_LATENCY\t= #{'%.4f'% r_lat[i]} ms", resfile
+          puts "W_LATENCY\t= #{'%.4f'% w_lat[i]} ms", resfile
+          puts "95%tile_R_LAT\t= #{'%.4f'% r_lat_95[i]} ms", resfile
+          puts "95%tile_W_LAT\t= #{'%.4f'% w_lat_95[i]} ms", resfile
           puts "=============================", resfile
         end
       end
