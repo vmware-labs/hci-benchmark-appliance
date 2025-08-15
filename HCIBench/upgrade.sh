@@ -220,6 +220,11 @@ echo 'Removing old web app'
 rm -rf /var/opt/apache-tomcat-*/webapps/VMtest*
 echo 'Copying new web app'
 mv "$PACKAGES/vmtest/VMtest.war" /var/opt/apache-tomcat-*/webapps
+
+echo -e "\e[33mModify Port from 8443 to 443...\e[0m"
+sed "s/8443/443/g" -i /var/opt/apache-tomcat-8.5.68/conf/server.xml
+sed "s/8443/443/g" -i /var/opt/apache-tomcat-8.5.68/webapps/VMtest/config/*.html
+
 echo 'Starting Tomcat'
 # Tomcat service needs to be started then restarted...
 service tomcat start
@@ -251,6 +256,16 @@ echo -e "\e[33mDeploying gems...\e[0m"
 gem install ipaddress
 unzip -q $DIR/rvc_rvc/gems.zip -d $DIR/rvc_rvc/ && mv $DIR/rvc_rvc /opt/vmware/rvc
 echo ""
+
+#
+# Upgrade HTTPD
+#************************************************
+echo -e "\e[33mUpgrading HTTPD...\e[0m"
+tdnf upgrade httpd --nogpgcheck -y
+echo ""
+
+
+
 
 #
 #  PERMISSIONS
