@@ -223,7 +223,8 @@ mv "$PACKAGES/vmtest/VMtest.war" /var/opt/apache-tomcat-*/webapps
 
 echo -e "\e[33mModify Port from 8443 to 443...\e[0m"
 sed "s/8443/443/g" -i /var/opt/apache-tomcat-8.5.68/conf/server.xml
-sed "s/8443/443/g" -i /var/opt/apache-tomcat-8.5.68/webapps/VMtest/config/*.html
+sed "s/8443/443/g" -i /var/opt/apache-tomcat-8.5.68/webapps/VMtest/config/logs.html
+sed "s/8443/443/g" -i /var/opt/apache-tomcat-8.5.68/webapps/VMtest/config/results.html
 
 echo 'Starting Tomcat'
 # Tomcat service needs to be started then restarted...
