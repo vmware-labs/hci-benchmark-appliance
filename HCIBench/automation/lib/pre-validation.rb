@@ -10,7 +10,7 @@ require_relative 'validate_subnets.rb'
 
 @log_file = "#{$log_path}/prevalidation/pre-validation.log"
 @ip_Address = _get_ip_addr
-@http_place = "https://#{@ip_Address}:8443/output/hcibench_logs/prevalidation/"
+@http_place = "https://#{@ip_Address}:443/output/hcibench_logs/prevalidation/"
 @warning_msg = ""
 @dc_path, @dc_path_escape = "",""
 @cl_path, @cl_path_escape = "",""

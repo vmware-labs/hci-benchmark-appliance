@@ -17,7 +17,7 @@ require "cgi"
 @ip_Address = _get_ip_addr
 @ip_url = @ip_Address
 @ip_url = "[" + @ip_Address + "]" if IPAddress.valid_ipv6? @ip_Address
-@http_place = "https://#{@ip_url}:8443/output/results"
+@http_place = "https://#{@ip_url}:443/output/results"
 @sleep_time = 1800
 @debug_mode = $vsan_debug
 @vsan_clusters_for_debug = [$cluster_name]

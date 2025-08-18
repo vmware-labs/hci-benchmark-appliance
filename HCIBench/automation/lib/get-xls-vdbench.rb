@@ -229,7 +229,7 @@ else
             else
                 book.write xls_file    
                 p "======================================================================================"
-                p "Summary XLS file generated: https://#{ip}:8443/output/results/#{folder_name}-vdbench.xls"
+                p "Summary XLS file generated: https://#{ip}:443/output/results/#{folder_name}-vdbench.xls"
                 p "======================================================================================"
             end
         else

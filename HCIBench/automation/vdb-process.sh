@@ -87,7 +87,7 @@ for (( j=1;j<$ELEMENTS;j++)); do
                 it=$(grep -h avg "$f" | sed "${i}q;d" | awk -v col_num=$(( 10 + $SHORT + STDDEVOFFSET )) '{print $col_num}')
                 printf "%f+" $it >> p95_"$store_name".txt
             else
-                echo "  https://${IP}:8443/output/results/"`echo "${f}" | cut -d '/' -f5-` >> /opt/automation/tmp/badfile.txt 
+                echo "  https://${IP}:443/output/results/"`echo "${f}" | cut -d '/' -f5-` >> /opt/automation/tmp/badfile.txt 
                 NUM=$((${NUM}-1))
             fi
         done
