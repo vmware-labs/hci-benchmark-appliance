@@ -39,7 +39,7 @@ You can choose to upgrade HCIBench with the latest code if there is existing HCI
 
 #### Steps
 1. SSH into your HCIBench VM and run the following cmds to upgrade your HCIBench to the latest build
-2. tdnf install -y git && git clone https://github.com/vmware-labs/hci-benchmark-appliance.git && sh hci-benchmark-applianc/HCIBench/upgrade.sh
+2. tdnf install -y git && git clone https://github.com/vmware-labs/hci-benchmark-appliance.git && sh hci-benchmark-appliance/HCIBench/upgrade.sh
 
 or you can get the zip file
 cd /root/ && wget https://github.com/vmware-labs/hci-benchmark-appliance/archive/refs/heads/main.zip && unzip main && sh hci-benchmark-appliance-main/HCIBench/upgrade.sh
