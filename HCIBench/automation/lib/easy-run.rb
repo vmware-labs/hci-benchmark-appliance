@@ -167,7 +167,7 @@ else
   vm_deployed_size = test_vsan ? (total_cache_size / ftt_amplification) : total_cache_size
   @disk_size = 64
   @disk_size = [(vm_deployed_size/(@vm_num * @data_disk_num)).floor,1].max if (@vm_num * @data_disk_num * @disk_size) > vm_deployed_size
-  thread_num = 64 / @data_disk_num
+  thread_num = 128 / @data_disk_num
   devider = 8
 end
 puts "
