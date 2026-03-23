@@ -3941,7 +3941,7 @@ class InventoryAnalyzer
     tab << "the IO work between the SSDs and HDDs. In particular, a low "
     tab << "ReadCache (RC) hit ratio means that the size of the SSD is not "
     tab << "large enough to keep the 'working set' of the workload in cache. "
-    tab << "Typically that in turn leads to the HDDs (also refered to as "
+    tab << "Typically that in turn leads to the HDDs (also referred to as "
     tab << "Magnetic Disk, MD) seeing a lot of IOPS and high IO latencies. "
     tab << "In such cases a cache analysis should be done to determine how "
     tab << "much cache would be sufficient for the workload to potentially "

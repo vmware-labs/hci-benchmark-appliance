@@ -6747,7 +6747,7 @@ def _v2_ondisk_upgrade_display_preflight_error conn, logger, hosts_props, error,
   elsif issue.is_a?(VIM::VsanUpgradeSystemPreflightCheckIssue)
     msg.each{|x| logger.info(x)}
   else
-    logger.info "An unknown error has occured (type: #{type})"
+    logger.info "An unknown error has occurred (type: #{type})"
   end
 end
 
