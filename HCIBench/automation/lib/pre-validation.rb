@@ -1,5 +1,6 @@
 #!/usr/bin/ruby
 require 'fileutils'
+require 'tmpdir'
 require 'ipaddr'
 require 'resolv'
 require 'shellwords'
@@ -77,7 +78,9 @@ def validate_vc_info
   end
   err_msg "HCIBench Can NOT Take \":\" in the vCenter Username." if $vc_username.include? ":"
 
-  cmd_run = system("govc about > /dev/null 2>&1")
+  tmp_home = Dir.mktmpdir("govc-validate-")
+  cmd_run = system({"HOME" => tmp_home}, "govc about > /dev/null 2>&1")
+  FileUtils.remove_entry(tmp_home)
   if !cmd_run
     err_msg "VC #{$vc_ip} IP or Credential Info incorrect!"
   else
