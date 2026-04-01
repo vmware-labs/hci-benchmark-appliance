@@ -17,9 +17,7 @@ if ps aux | grep $SCRIPTNAME | grep -q ruby; then
   echo "Script already running! Exiting"
   exit 255
 else
-  ruby $DIR/lib/pre-validation.rb 2>/opt/automation/logs/prevalidation/pre-validation.log
-  RESULT=`ps -ef | grep ${SCRIPTNAME} | grep ruby`
-  PID=`echo ${RESULT}|awk '{ print $2 }'`
-  echo $PID > $PIDFILE
+  ruby $DIR/lib/pre-validation.rb 2>/opt/automation/logs/prevalidation/pre-validation.log &
+  echo $! > $PIDFILE
 fi
 

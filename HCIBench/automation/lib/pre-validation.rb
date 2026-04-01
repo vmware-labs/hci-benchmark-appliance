@@ -60,6 +60,14 @@ def validate_if_variable_empty var
   end
 end
 
+def _dir_empty?(path)
+  (Dir.entries(path) - ['.', '..']).empty?
+end
+
+def _storage_policy_set?
+  !$storage_policy.strip.empty?
+end
+
 def validate_subnets
   msg = ValidateSubnets.new.ipv4_conflict?('docker0')
   err_msg "There are interfaces that conflict with the internal docker network:\n#{msg.join("\n")}" if msg
@@ -78,9 +86,7 @@ def validate_vc_info
   end
   err_msg "HCIBench Can NOT Take \":\" in the vCenter Username." if $vc_username.include? ":"
 
-  tmp_home = Dir.mktmpdir("govc-validate-")
-  cmd_run = system({"HOME" => tmp_home}, "govc about > /dev/null 2>&1")
-  FileUtils.remove_entry(tmp_home)
+  cmd_run = Dir.mktmpdir("govc-validate-") { |tmp_home| system({"HOME" => tmp_home}, "govc about > /dev/null 2>&1") }
   if !cmd_run
     err_msg "VC #{$vc_ip} IP or Credential Info incorrect!"
   else
@@ -94,8 +100,6 @@ def validate_dc_info
   wrong_dc, errMsg = _is_duplicated "dc", $dc_name
   err_msg errMsg if wrong_dc
 
-  #cmd_run = system(%{govc datacenter.info -dc "#{Shellwords.escape($dc_name)}" > /dev/null 2>&1})
-  #if @dc_path == ""
   puts "Datacenter #{$dc_name} Validated"
 end
 
@@ -105,7 +109,6 @@ def validate_cluster_info
   wrong_cl, errMsg = _is_duplicated "cl", $cluster_name
   err_msg errMsg if wrong_cl
   puts "Cluster #{$cluster_name} Validated"
-  #@cl_path, @cl_path_escape = _get_cl_path
   drs_mode_js = JSON.parse(`govc object.collect -dc "#{Shellwords.escape($dc_name)}" -json -s #{_get_moid("cl",$cluster_name).join(":")} configuration.drsConfig`.chomp)
   if drs_mode_js["enabled"]
     @drs_mode = drs_mode_js["defaultVmBehavior"]
@@ -117,12 +120,10 @@ def validate_cluster_info
   puts "Validating If Any Hosts in Cluster #{$cluster_name} for deployment is in Maintainance Mode..."
   deploy_hosts_list = _get_deploy_hosts_list
   deploy_hosts_list.each do |host|
-    err_msg "Host #{host} is either in maintainance mode or disconnected, please remove it from hosts list" if not _host_healthy(_get_moid("hs",host)[1]) and $deploy_on_hosts and all_hosts.include? host 
-    puts "Host #{host} is in maintainance mode" if `govc object.collect -dc "#{Shellwords.escape($dc_name)}" -s #{_get_moid("hs",host).join(":")} runtime.inMaintenanceMode`.chomp == "true"
-  end
-  #puts "All the Hosts in Cluster #{$cluster_name} are not in Maitainance Mode"
-  # Hosts hostname resolvable and accessible
-  deploy_hosts_list.each do |host|
+    host_moid = _get_moid("hs",host)
+    host_moid_str = host_moid.join(":")
+    err_msg "Host #{host} is either in maintainance mode or disconnected, please remove it from hosts list" if not _host_healthy(host_moid[1]) and $deploy_on_hosts and all_hosts.include? host
+    puts "Host #{host} is in maintainance mode" if `govc object.collect -dc "#{Shellwords.escape($dc_name)}" -s #{host_moid_str} runtime.inMaintenanceMode`.chomp == "true"
     err_msg "Cannot Resolve Host #{host} Hostname, Please Check the DNS Settings!" if !_is_ip(host) and _get_ip_from_hostname(host) == "Unresolvable"
   end
 end
@@ -146,9 +147,10 @@ def validate_rp_info
         owner_counter[owner] = 1
       end
     end
-    if not owner_counter.has_key?(_get_moid("cl",$cluster_name).join(":"))
+    cluster_moid = _get_moid("cl",$cluster_name).join(":")
+    if not owner_counter.has_key?(cluster_moid)
       err_msg "Resource Pool #{$resource_pool_name} doesn't exist in cluster #{$cluster_name}"
-    elsif owner_counter[_get_moid("cl",$cluster_name).join(":")] > 1
+    elsif owner_counter[cluster_moid] > 1
       err_msg "Multiple Resource Pool with name #{$resource_pool_name} found in cluster #{$cluster_name}"
     end
     puts "Resource Pool #{$resource_pool_name} validated"
@@ -232,18 +234,18 @@ def validate_datastore_info
 end
 
 def validate_storage_policy
-  if $storage_policy and not $storage_policy.empty? and not $storage_policy.strip.empty?
-      puts "Validating storage policy #{$storage_policy}..."
-      compliant_ids = _get_compliant_datastore_ids_escape($storage_policy) || []
-      err_msg "Unable to find the storage policy #{$storage_policy} or Unable to find compliant datastores of policy #{$storage_policy}" if compliant_ids == []
-      err_msg "The storage policy #{$storage_policy} is not compatible with any of the datastores specified." if (@ds_ids & compliant_ids) == []
+  if _storage_policy_set?
+    puts "Validating storage policy #{$storage_policy}..."
+    compliant_ids = _get_compliant_datastore_ids_escape($storage_policy) || []
+    err_msg "Unable to find the storage policy #{$storage_policy} or Unable to find compliant datastores of policy #{$storage_policy}" if compliant_ids.empty?
+    err_msg "The storage policy #{$storage_policy} is not compatible with any of the datastores specified." if (@ds_ids & compliant_ids).empty?
   end
 end
 
 def validate_vsan_info
   @vsan_datastores = _get_vsandatastore_in_cluster
   vsan_datastore_names = @vsan_datastores.keys & $datastore_names
-  if vsan_datastore_names != []
+  if !vsan_datastore_names.empty?
     puts "vSAN is Enabled in Cluster #{$cluster_name}, the vSAN Datastore for test is #{vsan_datastore_names.join(', ')}"
   else
     err_msg "Can't find any vSAN Datastores for test"
@@ -270,11 +272,8 @@ def validate_vsan_info
     end
     puts "vSAN #{local} Datastore name is #{vsan_datastore_name}, capacity is #{vsan_capacity} GB and freespace is #{vsan_freespace} GB, the default policy is #{vsan_default_policy_name}"
 
-    if $storage_policy and not $storage_policy.empty? and not $storage_policy.strip.empty?
-      puts "Validating storage policy #{$storage_policy}..."
-      compliant_ids = _get_compliant_datastore_ids_escape($storage_policy) || []
-      err_msg "Unable to find the storage policy #{$storage_policy} or Unable to find compliant datastores of policy #{$storage_policy}" if compliant_ids == []
-      err_msg "The storage policy #{$storage_policy} is not compatible with any of the datastores specified." if (@ds_ids & compliant_ids) == []
+    if _storage_policy_set?
+      validate_storage_policy
       rules = _get_storage_policy_rules($storage_policy)
     end
     spbm_rule_map = _get_policy_rule_map(rules)
@@ -350,8 +349,6 @@ def validate_misc_info
   end
   err_msg "Only one Datastore can be specified with Easy Run enabled!" if $easy_run and ($total_datastore > 1)
 
-  #Validate staic info
-  #Start static if the box is checked
   if $static_enabled
     puts "Validating IP pool availability..."
     system("ifconfig -s eth1 0.0.0.0")
@@ -360,7 +357,6 @@ def validate_misc_info
     if _range_big_enough
       ip_pool = _get_ip_pools
       if ip_pool.size >= ip_required
-        #eth1_ip = $eth1_ip
         find_ip = true
       else
         err_msg "We need at least #{$tvm_num} IPs available in order to testing cluster inter-connectivity, and now these IPs are available: #{ip_pool}" if ip_pool.size < $tvm_num
@@ -382,7 +378,6 @@ def validate_misc_info
           err_msg "Not enough IP Addresses available, these #{ip_pool.size} IP are currently available: #{ip_pool} \nthese #{$occupied_ips.size} IPs are currently occupied: #{$occupied_ips} \nthese #{ip_recycle.size} occupied IPs will be reused upon guest VMs deployment: #{ip_recycle} \nbut we still need #{ip_needed} IP released to get #{ip_required} IP ready for testing"
         else
           warning_msg "There aren't enough available IP address(#{ip_required} needed) available for deploying guest VMs. However, there are #{ip_recycle} IPs will be reused either by deleting or reusing the existing guest VMs so you can still go ahead to start testing."
-          #eth1_ip = $eth1_ip
           find_ip = true
         end
       end
@@ -430,7 +425,6 @@ def validate_cluster_connection
     tvms = entry["vms"]
     tvms.each do |tvm|
       cmd = "gip=`netstat -nptW | grep 'sshd' | awk '{print $5}' | rev | cut -d ':' -f2- | rev | sed 's/\\(^fe80:.*\\)\\($\\)/\\1%eth0\\2/'`;"
-      #cmd = "gip=`netstat -ntp 2>/dev/null| grep ':22' | awk '{print $5}' | cut -d ':' -f1`;"
 
       cmd += 'timeout -t 5 sh -c "nc -vz $gip 2003" >/dev/null 2>&1;'
       cmd += "echo $?"
@@ -460,7 +454,6 @@ def validate_host_info
       puts "Host #{host} Address Validated"
     end
     puts "Validating If Host #{host} Is In Cluster #{$cluster_name}..."
-    #Resolv.each_address("#{host}") do |ip|
     if not hosts_list.include? host
       err_msg "Host #{host} Is NOT In Cluster #{$cluster_name}!"
     else
@@ -526,12 +519,10 @@ def validate_vm_conf
     end
   end
   host_vmnum_hash.keys.each do |host|
-    spare_cpu = _get_host_spare_compute_resource(host)[0]
-    spare_ram = _get_host_spare_compute_resource(host)[1]
+    spare_cpu, spare_ram = _get_host_spare_compute_resource(host)
     cpu_to_use = host_vmnum_hash[host] * $num_cpu
     ram_to_use = host_vmnum_hash[host] * $size_ram
-    cpu_used_by_guest_vm = _get_resource_used_by_guest_vms(host)[0]
-    ram_used_by_guest_vm = _get_resource_used_by_guest_vms(host)[1]
+    cpu_used_by_guest_vm, ram_used_by_guest_vm = _get_resource_used_by_guest_vms(host)
     warning_msg "#{host_vmnum_hash[host]} VMs will be deployed onto host #{host}, each VM has #{$num_cpu} vCPU configured, in this case, the CPU resource of #{host} would be oversubscribed.\nYou can reduce number of vCPU per guest VM or reduce number of VMs to deploy to ease this situation." if spare_cpu.to_i + cpu_used_by_guest_vm.to_i - cpu_to_use <= 0
     warning_msg "#{host_vmnum_hash[host]} VMs will be deployed onto host #{host}, each VM has #{$size_ram}GB RAM configured, in this case, the Memory of #{host} would be oversubscribed.\nYou can reduce the size of ram per guest VM or reduce number of VMs to deploy to ease this situation." if spare_ram.to_i + ram_used_by_guest_vm.to_i - ram_to_use <= 0
   end
@@ -540,12 +531,7 @@ end
 
 def validate_testing_config
   err_msg "The User Defined Parameter Files Directory #{$self_defined_param_file_path} is NOT Valid!" if !File.directory?($self_defined_param_file_path)
-  empty = true
-  Dir.foreach($self_defined_param_file_path) do |item|
-    next if item == '.' or item == '..'
-    empty = false
-  end
-  err_msg "No Workload Param File Found in the User Defined Workload Param Files Directory #{$self_defined_param_file_path}!" if empty
+  err_msg "No Workload Param File Found in the User Defined Workload Param Files Directory #{$self_defined_param_file_path}!" if _dir_empty?($self_defined_param_file_path)
   err_msg "The Value of warm_up_disk_before_testing: #{$warm_up_disk_before_testing} is Not Valid, which should be NONE, ZERO or RANDOM" if ($warm_up_disk_before_testing != "NONE" and $warm_up_disk_before_testing != "ZERO" and $warm_up_disk_before_testing != "RANDOM")
   warning_msg "vSAN will compress the written data, recommend to use RANDOM method for disk preparation" if @use_random and $warm_up_disk_before_testing == "ZERO"
   method = "ZERO"
@@ -555,12 +541,7 @@ def validate_testing_config
 end
 
 def validate_fio_param
-  empty = true
-  Dir.foreach($fio_source_path) do |item|
-    next if item == '.' or item == '..'
-    empty = false
-  end
-  if empty
+  if _dir_empty?($fio_source_path)
     err_msg "No Fio Binary Found, Please place fio binary to /opt/output/fio-source"
   else
     if  `ls #{$fio_source_path} | wc -l`.encode('UTF-8', :invalid => :replace).to_i != 1
@@ -598,12 +579,7 @@ def validate_fio_param
 end
 
 def validate_vdbench_binary
-  empty = true
-  Dir.foreach($vdbench_source_path) do |item|
-    next if item == '.' or item == '..'
-    empty = false
-  end
-  if empty
+  if _dir_empty?($vdbench_source_path)
     err_msg "No VDBENCH Zip File Found in the VDBENCH Source Directory, please upload VDBENCH Zip file!"
   else
     err_msg "Please make sure Vdbench zip file is the only file in #{$vdbench_source_path}" if  `ls #{$vdbench_source_path} | wc -l`.encode('UTF-8', :invalid => :replace).to_i != 1

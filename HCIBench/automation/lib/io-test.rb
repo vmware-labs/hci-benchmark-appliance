@@ -66,12 +66,12 @@ def collectVmkStats(res_path,sleep_time)
 end
 
 def processVmkStats(res_path)
-  `mv /tmp/#{$share_folder_name}/* #{res_path}`
-  `ruby /opt/automation/lib/collectVmkstats.rb #{res_path} "true"`
+  `mv /tmp/#{$share_folder_name}/* "#{res_path}"`
+  `ruby /opt/automation/lib/collectVmkstats.rb "#{res_path}" "true"`
 end
 
 def collectSupportBundle(res_path, start_time, end_time)
-  `ruby /opt/automation/lib/collectSupportBundle.rb #{res_path} #{start_time} #{end_time}`
+  `ruby /opt/automation/lib/collectSupportBundle.rb "#{res_path}" #{start_time} #{end_time}`
 end
 
 def snapshot(before_creation, num_ss, sleep_time, delete_after_creation)
@@ -86,7 +86,7 @@ def generatePdf(path)
 end
 
 for item in Dir.entries($self_defined_param_file_path).sort
-  File.delete($humbug_link_file) if File.exists?($humbug_link_file)
+  File.delete($humbug_link_file) if File.exist?($humbug_link_file)
   item_log = "#{$log_path}/io-test-#{item}.log"
   next if item == '.' or item == '..' or File.directory?(item)
 

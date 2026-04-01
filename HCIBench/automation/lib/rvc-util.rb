@@ -35,7 +35,7 @@ rescue Errno::ENOENT
   STDERR.puts "Could not open ossl configuration file: #{ossl_conf} error: file does not exist"
   exit(1)
 rescue StandardError => e
-  STDERR.puts "Culd not open ossl configuration file: #{ossl_conf} error: #{e}"
+  STDERR.puts "Could not open ossl configuration file: #{ossl_conf} error: #{e}"
   exit(1)
 end
 
@@ -49,7 +49,7 @@ if vcp
     exit(1)
   end
 else
-  $vcp_password = ''
+  $vc_password = ''
 end
 
 $clear_cache = entry["clear_cache"]
@@ -277,8 +277,8 @@ def _parse_multi_json str
     end
     count = count - 1 if char == "}"
     if count == 0 and in_json
-	json_arr.push(str[start_pos..index])
-        in_json = false
+      json_arr.push(str[start_pos..index])
+      in_json = false
     end
   end
   return json_arr

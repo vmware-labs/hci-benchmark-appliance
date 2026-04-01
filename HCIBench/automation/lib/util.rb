@@ -156,6 +156,7 @@ end
 def extractResultJson(jsons)
   parsed = {}
   jsons.each do |json|
+    next unless json['jobs'].is_a?(Array) && !json['jobs'].empty?
     if json['jobs'][0]['eta'] == 0
       parsed = json
       break

@@ -22,8 +22,11 @@ else
       startTime = File.basename(dir).split("-")[-1]
       endTime = Time.now.to_i
       res_usage = _get_res_usage(startTime, endTime, dir)
-      file = File.open("#{dir}/#{$resource_json_file_name}", 'w')
-      file.puts _get_res_avg_usage(startTime, endTime).to_json
+      File.open("#{dir}/#{$resource_json_file_name}", 'w') do |resource_file|
+        resource_file.puts _get_res_avg_usage(startTime, endTime).to_json
+      end
+      files_finished_early = []
+      resfile = nil
       for datastore in $datastore_names
         ds_prefix = _get_ds_id_by_name(datastore)
         num_vm = 0
@@ -37,7 +40,7 @@ else
         max_num_jobs = 0
         vm_finish_early = 0
         files_finished_early = []
-        file_arr = `ls #{dir}/*-'#{ds_prefix}'-*.json`.split("\n")
+        file_arr = Dir.glob("#{dir}/*-#{ds_prefix}-*.json").sort
         file_arr.each do |file|
           jsons = extractJsonsFromFile(file)
           parsed = extractResultJson(jsons)  
@@ -102,6 +105,6 @@ else
       end
     end
     hcibench_version=`cat /etc/hcibench_version`.chomp
-    `cd "#{dir}"; cp -r #{$log_path} "#{dir}"/; tar zcfP HCIBench-#{hcibench_version}-logs.tar.gz -C logs .; rm -rf logs`
+    `cd "#{dir}"; cp -r "#{$log_path}" "#{dir}"/; tar zcfP HCIBench-#{hcibench_version}-logs.tar.gz -C logs .; rm -rf logs`
   end
 end
