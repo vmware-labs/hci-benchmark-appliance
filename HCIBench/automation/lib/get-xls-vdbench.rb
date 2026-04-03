@@ -44,8 +44,8 @@ else
                 sum_sheet.row(0).push metric.upcase
             end
 
-            for col in 0..17
-              sum_sheet.row(0).set_format(col, format)
+            sum_sheet.row(0).size.times do |col|
+                sum_sheet.row(0).set_format(col, format)
             end
             row_num = 0
             subfolders.sort.each_with_index do |testcase,index|

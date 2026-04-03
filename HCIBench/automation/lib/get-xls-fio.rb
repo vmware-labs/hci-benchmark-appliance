@@ -43,20 +43,20 @@ else
                                     Write\ 95tile\ Latency(ms)
                                     Blocksize
                                     Read\ Percentage
-                                    Total\ Outstanding\ IO
-                                    vSAN\ CPU\ Usage}
-                                    #Physical\ CPU\ Usage
-                                    #Physical\ Memory\ Usage}
+                                    Total\ Outstanding\ IO}
 
-            resource_file = File.read("#{subfolders[0]}/#{$resource_json_file_name}")
-            resource_hash = JSON.parse(resource_file)
-            clusters = resource_hash.keys
-            resource_hash[clusters[0]].keys.each do |metric|
-                metric = metric.gsub(" ","\ ")
-                sum_sheet.row(0).push metric.upcase
+            first_resource = "#{subfolders[0]}/#{$resource_json_file_name}"
+            if File.exist?(first_resource)
+                resource_file = File.read(first_resource)
+                resource_hash = JSON.parse(resource_file)
+                clusters = resource_hash.keys
+                resource_hash[clusters[0]].keys.each do |metric|
+                    metric = metric.gsub(" ","\ ")
+                    sum_sheet.row(0).push metric.upcase
+                end
             end
 
-            for col in 0..17
+            sum_sheet.row(0).size.times do |col|
                 sum_sheet.row(0).set_format(col, format)
             end
             row_num = 0
@@ -138,7 +138,6 @@ else
                             vm_finish_early += 1
                         end
                     end
-                    pcpu_usage = `/opt/automation/lib/getPCpuUsage.rb "#{testcase}"`.to_s
                     case_name = File.basename(testcase)
                     numofJsons = 0
                     global_jsons.each do |vm|
@@ -146,8 +145,8 @@ else
                             numofJsons = vm.size
                         end
                     end
-                    resource_file = File.read("#{testcase}/#{$resource_json_file_name}")
-                    resource_hash = JSON.parse(resource_file)
+                    tc_resource = "#{testcase}/#{$resource_json_file_name}"
+                    resource_hash = File.exist?(tc_resource) ? JSON.parse(File.read(tc_resource)) : {}
                     for i in 0..max_num_jobs-1
                         throughput[i] = throughput[i] / 1024
                         r_lat[i] = r_lat[i] / ((num_vm - vm_finish_early)* 1000000)
@@ -165,8 +164,8 @@ else
                             end
                         end
 
-                        sum_sheet.row(1+row_num).push "Sheet-#{1+i+index}", case_name, job_names[i], num_vm, vm_finish_early, iops[i].round(2), throughput[i].round(2),r_lat[i].round(2), w_lat[i].round(2), 
-                        r_lat_95[i].round(2), w_lat_95[i].round(2), bs[i], readpct[i].to_s+"%",oio[i]*disks, pcpu_usage
+                        sum_sheet.row(1+row_num).push "Sheet-#{1+i+index}", case_name, job_names[i], num_vm, vm_finish_early, iops[i].round(2), throughput[i].round(2), r_lat[i].round(2), w_lat[i].round(2),
+                        r_lat_95[i].round(2), w_lat_95[i].round(2), bs[i], readpct[i].to_s+"%", oio[i]*disks
                         temp_hash.each do |metric,value|
                             sum_sheet.row(1+row_num).push(value)
                         end

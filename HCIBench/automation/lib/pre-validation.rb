@@ -615,50 +615,55 @@ def validate_vdbench_binary
 end
 
 prepareLogs
-if $tool == "vdbench"
-  puts "Validating Vdbench binary and the workload profiles..."
-  validate_vdbench_binary
-end
-if $tool == "fio"
-  puts "Validating Fio binary and the workload profiles..."
-  validate_fio_param
-end
-validate_if_variable_empty($vc_ip)
-validate_if_variable_empty($vc_username)
-validate_if_variable_empty($vc_password)
-validate_if_variable_empty($dc_name)
-validate_if_variable_empty($cluster_name)
-validate_if_variable_empty($deploy_on_hosts)
-validate_if_variable_empty($datastore_names)
-validate_subnets
-validate_vc_info
-validate_dc_info
-validate_cluster_info
-validate_host_info if $deploy_on_hosts
-validate_rp_info
-validate_vm_folder_info
-validate_network_info
-validate_datastore_info
-if @has_vsan
-  validate_vsan_info 
+
+if $test_target == "k8s"
+  load File.join($basedir, "pre-validation-k8s.rb")
 else
-  validate_storage_policy
+  if $tool == "vdbench"
+    puts "Validating Vdbench binary and the workload profiles..."
+    validate_vdbench_binary
+  end
+  if $tool == "fio"
+    puts "Validating Fio binary and the workload profiles..."
+    validate_fio_param
+  end
+  validate_if_variable_empty($vc_ip)
+  validate_if_variable_empty($vc_username)
+  validate_if_variable_empty($vc_password)
+  validate_if_variable_empty($dc_name)
+  validate_if_variable_empty($cluster_name)
+  validate_if_variable_empty($deploy_on_hosts)
+  validate_if_variable_empty($datastore_names)
+  validate_subnets
+  validate_vc_info
+  validate_dc_info
+  validate_cluster_info
+  validate_host_info if $deploy_on_hosts
+  validate_rp_info
+  validate_vm_folder_info
+  validate_network_info
+  validate_datastore_info
+  if @has_vsan
+    validate_vsan_info
+  else
+    validate_storage_policy
+  end
+  validate_misc_info
+
+  validate_cluster_connection
+
+  if !$easy_run
+    validate_if_variable_empty($vm_num)
+    validate_vm_conf
+    validate_testing_config
+  else
+    puts "Easy RUN Enabled, Skipping Validating VM and Parameter Config..."
+  end
+
+  puts "------------------------------------------------------------------------------"
+  puts "All the config has been validated, please go ahead to kick off testing"
+  puts "------------------------------------------------------------------------------"
 end
-validate_misc_info
-
-validate_cluster_connection
-
-if !$easy_run
-  validate_if_variable_empty($vm_num)
-  validate_vm_conf
-  validate_testing_config
-else
-  puts "Easy RUN Enabled, Skipping Validating VM and Parameter Config..."
-end
-
-puts "------------------------------------------------------------------------------"
-puts "All the config has been validated, please go ahead to kick off testing"
-puts "------------------------------------------------------------------------------"
 
 if @warning_msg != ""
   puts "Warning:"

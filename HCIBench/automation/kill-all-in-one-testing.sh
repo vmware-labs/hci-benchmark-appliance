@@ -34,27 +34,35 @@ if ps aux | grep "${SCRIPTNAME}" | grep -q ruby; then
    fi
    kill -9 $(list_descendants $PID)
    kill -9 $PID
-   last_status=`tail -1 $DIR/logs/test-status.log`
-   if echo $last_status | grep -q "Deployment Started"
-   then
-     echo "Process killed, deleting deployed client VMs..." | tee -a $DIR/logs/test-status.log
-     ruby $DIR/lib/cleanup-vm.rb
-     echo "Client VMs deleted, deployment aborted!" | tee -a $DIR/logs/test-status.log
 
-   elif  echo $last_status | grep -q "Disk Preparation\|I/O Test Started\|Started Testing\|HERE TO MONITOR"
-   then
-     echo "Process killed, rebooting client VMs..." | tee -a $DIR/logs/test-status.log
-     ruby $DIR/lib/reboot-vms.rb
-     echo "Client VMs rebooted, getting IPs..." | tee -a $DIR/logs/test-status.log
-     ruby $DIR/lib/get-vm-ip.rb
-     echo "Client VMs IP prepared" | tee -a $DIR/logs/test-status.log
+   TEST_TARGET=$(cat /opt/automation/conf/test-mode 2>/dev/null || echo "vm")
+   if [ "${TEST_TARGET}" = "k8s" ]; then
+     echo "Process killed, cleaning up K8s pods, PVCs and namespace..." | tee -a $DIR/logs/test-status.log
+     ruby $DIR/lib/cleanup-k8s-pods.rb
+     echo "K8s resources deleted, testing aborted!" | tee -a $DIR/logs/test-status.log
+   else
+     last_status=`tail -1 $DIR/logs/test-status.log`
+     if echo $last_status | grep -q "Deployment Started"
+     then
+       echo "Process killed, deleting deployed client VMs..." | tee -a $DIR/logs/test-status.log
+       ruby $DIR/lib/cleanup-vm.rb
+       echo "Client VMs deleted, deployment aborted!" | tee -a $DIR/logs/test-status.log
+
+     elif  echo $last_status | grep -q "Disk Preparation\|I/O Test Started\|Started Testing\|HERE TO MONITOR"
+     then
+       echo "Process killed, rebooting client VMs..." | tee -a $DIR/logs/test-status.log
+       ruby $DIR/lib/reboot-vms.rb
+       echo "Client VMs rebooted, getting IPs..." | tee -a $DIR/logs/test-status.log
+       ruby $DIR/lib/get-vm-ip.rb
+       echo "Client VMs IP prepared" | tee -a $DIR/logs/test-status.log
+     fi
+     # reset eth1 no matter what
+     ifconfig -s eth1 0.0.0.0
+     ifconfig eth1 down
+     ifconfig eth1 up
    fi
-   # reset eth1 no matter what
-   ifconfig -s eth1 0.0.0.0
-   ifconfig eth1 down 
-   ifconfig eth1 up
    exit 255
-   
+
 else
   echo "No process is running"
   exit 255

@@ -17,7 +17,21 @@ require_relative 'util.rb'
 ossl_conf = '../conf/ossl-conf.yaml'
 
 $basedir=File.dirname(__FILE__)
-entry = YAML.load_file("#$basedir/../conf/perf-conf.yaml")
+_mode_file  = "#$basedir/../conf/test-mode"
+_perf_conf  = "#$basedir/../conf/perf-conf.yaml"
+_k8s_conf   = "#$basedir/../conf/k8s-conf.yaml"
+if File.exist?(_mode_file)
+  $test_target = File.read(_mode_file).strip
+elsif File.exist?(_perf_conf)
+  # Fallback: read test_target from perf-conf.yaml (pre-dates test-mode file)
+  $test_target = (YAML.load_file(_perf_conf) || {})["test_target"] || "vm"
+else
+  $test_target = "vm"
+end
+_conf_file = $test_target == "k8s" \
+  ? _k8s_conf \
+  : _perf_conf
+entry = YAML.load_file(_conf_file)
 #=====================2.8.1 bugs fix=======================
 entry.each { |item,value| entry[item] = nil if value == ""}
 entry["hosts"] = nil if entry["hosts"] == [""]
@@ -52,65 +66,68 @@ else
   $vc_password = ''
 end
 
-$clear_cache = entry["clear_cache"]
-$vsan_debug = entry["vsan_debug"]
+# Shared variables (VM and K8s)
+$tool         = entry["tool"] || "fio"
+$vm_num       = entry["number_vm"]
+$number_data_disk           = entry["number_data_disk"]
+$size_data_disk             = entry["size_data_disk"]
+$self_defined_param_file_path = entry["self_defined_param_file_path"]
+$warm_up_disk_before_testing  = entry["warm_up_disk_before_testing"]
+$testing_duration = entry["testing_duration"] == "" ? nil : entry["testing_duration"]
+$output_path      = entry["output_path"]
+$output_path_dir  = "/opt/output/results/" + $output_path.to_s
+$cleanup_vm   = entry["cleanup_vm"]
+$workloads    = entry["workloads"] || ["4k70r"]
+$latency_target = entry["latency_target"] || "Max"
 
-$hosts_credential = entry["hosts_credential"]
+if $test_target != "k8s"
+  $clear_cache = entry["clear_cache"]
+  $vsan_debug = entry["vsan_debug"]
 
-$hosts_credential.keys.each do |host|
-  host_val = $hosts_credential[host]
-  if $clear_cache or $vsan_debug
-    hp = host_val["host_password"]
-    if hp
-      begin
-        osw = OSSLWrapper.new(osc)
-        host_val["host_password"] = hp.nil? || hp.empty? ? '' : osw.decrypt(hp)
-      rescue StandardError => e
-        STDERR.puts "Could not open decrypt Host Password: Please re-save the Host #{host_val["host_name"]} Password.\nError: #{e}"
-        exit(1)
+  $hosts_credential = entry["hosts_credential"]
+
+  ($hosts_credential || {}).keys.each do |host|
+    host_val = $hosts_credential[host]
+    if $clear_cache or $vsan_debug
+      hp = host_val["host_password"]
+      if hp
+        begin
+          osw = OSSLWrapper.new(osc)
+          host_val["host_password"] = hp.nil? || hp.empty? ? '' : osw.decrypt(hp)
+        rescue StandardError => e
+          STDERR.puts "Could not open decrypt Host Password: Please re-save the Host #{host_val["host_name"]} Password.\nError: #{e}"
+          exit(1)
+        end
+      else
+        host_val["host_password"] = ''
       end
-    else
-      host_val["host_password"] = ''
     end
   end
-end
 
-$vc_username = entry["vc_username"]
-$easy_run = entry["easy_run"]
-$dc_name = entry["datacenter_name"].gsub("%","%25").gsub("/","%2f").gsub("\\","%5c")
-$cluster_name = entry["cluster_name"].gsub("%","%25").gsub("/","%2f").gsub("\\","%5c")
-$storage_policy = (entry["storage_policy"] || "").gsub('\\', '\\\\\\').gsub('"', '\"')
-$resource_pool_name = (entry["resource_pool_name"] || "" ).gsub("%","%25").gsub("/","%2f").gsub("\\","%5c")
-$resource_pool_name_escape = Shellwords.escape((entry["resource_pool_name"] || "" ).gsub("%","%25").gsub("/","%2f").gsub("\\","%5c"))
-$fd_name = entry["vm_folder_name"] || ""
-$vm_folder_name = Shellwords.escape(entry["vm_folder_name"] || "")
-$network_name = (entry["network_name"] || "VM Network").gsub("%","%25").gsub("/","%2f").gsub("\\","%5c")
-$datastore_names = entry["datastore_name"].map!{|ds|ds.gsub("%","%25").gsub("/","%2f").gsub("\\","%5c")}
-$deploy_on_hosts = entry["deploy_on_hosts"]
-$tool = entry["tool"]
-$vm_prefix = entry["vm_prefix"] || $tool
-$tvm_prefix = "hci-tvm"
-$folder_name = "#{$vm_prefix}-#{$cluster_name}-vms".gsub("%","%25").gsub("/","%2f").gsub("\\","%5c")
-$tvm_folder_name = "#{$tvm_prefix}-#{$cluster_name}-vms".gsub("%","%25").gsub("/","%2f").gsub("\\","%5c")
-$all_hosts = entry["hosts"]
-#$host_username = entry["host_username"]
-$vm_num = entry["number_vm"]
-$tvm_num = 0
-$num_cpu = entry["number_cpu"] || 4
-$size_ram = entry["size_ram"] || 8
-$number_data_disk = entry["number_data_disk"]
-$size_data_disk = entry["size_data_disk"]
-$self_defined_param_file_path = entry["self_defined_param_file_path"]
-$warm_up_disk_before_testing = entry["warm_up_disk_before_testing"]
-$testing_duration = entry["testing_duration"] == "" ? nil : entry["testing_duration"]
-$static_enabled = entry["static_enabled"]
-$output_path = entry["output_path"]
-$output_path_dir = "/opt/output/results/" + $output_path
-$reuse_vm = entry["reuse_vm"]
-$cleanup_vm = entry["cleanup_vm"]
-$workloads = entry["workloads"] || ["4k70r"]
-$latency_target = entry["latency_target"] || "Max"
-$multiwriter = entry["multi_writer"] || false
+  $vc_username = entry["vc_username"]
+  $easy_run = entry["easy_run"]
+  $dc_name = entry["datacenter_name"].gsub("%","%25").gsub("/","%2f").gsub("\\","%5c")
+  $cluster_name = entry["cluster_name"].gsub("%","%25").gsub("/","%2f").gsub("\\","%5c")
+  $storage_policy = (entry["storage_policy"] || "").gsub('\\', '\\\\\\').gsub('"', '\"')
+  $resource_pool_name = (entry["resource_pool_name"] || "" ).gsub("%","%25").gsub("/","%2f").gsub("\\","%5c")
+  $resource_pool_name_escape = Shellwords.escape((entry["resource_pool_name"] || "" ).gsub("%","%25").gsub("/","%2f").gsub("\\","%5c"))
+  $fd_name = entry["vm_folder_name"] || ""
+  $vm_folder_name = Shellwords.escape(entry["vm_folder_name"] || "")
+  $network_name = (entry["network_name"] || "VM Network").gsub("%","%25").gsub("/","%2f").gsub("\\","%5c")
+  $datastore_names = entry["datastore_name"].map!{|ds|ds.gsub("%","%25").gsub("/","%2f").gsub("\\","%5c")}
+  $deploy_on_hosts = entry["deploy_on_hosts"]
+  $vm_prefix = entry["vm_prefix"] || $tool
+  $tvm_prefix = "hci-tvm"
+  $folder_name = "#{$vm_prefix}-#{$cluster_name}-vms".gsub("%","%25").gsub("/","%2f").gsub("\\","%5c")
+  $tvm_folder_name = "#{$tvm_prefix}-#{$cluster_name}-vms".gsub("%","%25").gsub("/","%2f").gsub("\\","%5c")
+  $all_hosts = entry["hosts"]
+  $tvm_num = 0
+  $num_cpu = entry["number_cpu"] || 4
+  $size_ram = entry["size_ram"] || 8
+  $static_enabled = entry["static_enabled"]
+  $reuse_vm = entry["reuse_vm"]
+  $multiwriter = entry["multi_writer"] || false
+end
 #File path def
 $allinonetestingfile = "#{$basedir}/all-in-one-testing.rb"
 $cleanupfile = "#{$basedir}/cleanup-vm.rb"
@@ -146,55 +163,73 @@ $tmp_path = "#{$basedir}/../tmp/"
 $log_path = "#{$basedir}/../logs/"
 $vdbench_source_path = "/opt/output/vdbench-source"
 $fio_source_path = "/opt/output/fio-source"
-$compute_only_cluster = "" 
-$total_datastore = $datastore_names.count
-if IPAddress.valid? $vc_ip and IPAddress.valid_ipv6? $vc_ip
-  $vc_rvc = Shellwords.escape("#{$vc_username}:#{$vc_password}") + "@[#{$vc_ip}]" + " -a"
-else
-  $vc_rvc = Shellwords.escape("#{$vc_username}:#{$vc_password}") + "@#{$vc_ip}" + " -a"
-end
-$occupied_ips = []
-ENV['GOVC_USERNAME'] = "#{$vc_username}"
-ENV['GOVC_PASSWORD'] = "#{$vc_password}"
-if IPAddress.valid? $vc_ip and IPAddress.valid_ipv6? $vc_ip
-  ENV['GOVC_URL'] = "[#{$vc_ip}]"
-else
-  ENV['GOVC_URL'] = "#{$vc_ip}"
-end
-ENV['GOVC_INSECURE'] = "true"
-ENV['GOVC_DATACENTER'] = "#{$dc_name}"
-ENV['GOVC_PERSIST_SESSION'] = "true"
+$compute_only_cluster = ""
 $vm_num = 0 unless $vm_num
-$vms_perstore = $vm_num / $total_datastore
 
-$eth1_ip = ""
-$vm_yaml_file = "#{$basedir}/../tmp/vm.yaml"
-if $static_enabled and $ip_prefix.include? "Customize"
-  $starting_static_ip = $ip_prefix.split(" ")[1].split("/")[0]
-  $static_ip_size = $ip_prefix.split(" ")[1].split("/")[1]
-elsif $static_enabled
-  $starting_static_ip = $ip_prefix + ".0.1"
-  $static_ip_size = "18"
+if $test_target != "k8s"
+  $total_datastore = $datastore_names.count
+  if IPAddress.valid? $vc_ip and IPAddress.valid_ipv6? $vc_ip
+    $vc_rvc = Shellwords.escape("#{$vc_username}:#{$vc_password}") + "@[#{$vc_ip}]" + " -a"
+  else
+    $vc_rvc = Shellwords.escape("#{$vc_username}:#{$vc_password}") + "@#{$vc_ip}" + " -a"
+  end
+  $occupied_ips = []
+  ENV['GOVC_USERNAME'] = "#{$vc_username}"
+  ENV['GOVC_PASSWORD'] = "#{$vc_password}"
+  if IPAddress.valid? $vc_ip and IPAddress.valid_ipv6? $vc_ip
+    ENV['GOVC_URL'] = "[#{$vc_ip}]"
+  else
+    ENV['GOVC_URL'] = "#{$vc_ip}"
+  end
+  ENV['GOVC_INSECURE'] = "true"
+  ENV['GOVC_DATACENTER'] = "#{$dc_name}"
+  ENV['GOVC_PERSIST_SESSION'] = "true"
+  $vms_perstore = $total_datastore > 0 ? $vm_num / $total_datastore : 0
+
+  $eth1_ip = ""
+  $vm_yaml_file = "#{$basedir}/../tmp/vm.yaml"
+  if $static_enabled and $ip_prefix.include? "Customize"
+    $starting_static_ip = $ip_prefix.split(" ")[1].split("/")[0]
+    $static_ip_size = $ip_prefix.split(" ")[1].split("/")[1]
+  elsif $static_enabled
+    $starting_static_ip = $ip_prefix + ".0.1"
+    $static_ip_size = "18"
+  end
+
+  $dc_path = ""
+  $cl_path = ""
+  $ip_pool = []
+  $vsan_perf_diag = false
+  $vsan_version = 1
+  $cluster_hosts_map = {}
+  $all_vsan_clusters = []
+  $all_vsan_lsom_clusters = []
+  $vsandatastore_in_cluster = {}
+  $hosts_deploy_list = []
+  $easy_run_vsan_cluster = ""
+  $telegraf_target_clusters_map = {}
+  $observer_target_clusters_arr = [$cluster_name]
+  $perfsvc_master_nodes = []
+  $vsan_debug_sharing_path = ""
+  $share_folder_name = "vsan_debug"
 end
 
-$dc_path = ""
-$cl_path = ""
-$ip_pool = []
-$vsan_perf_diag = false
-$vsan_version = 1
-$cluster_hosts_map = {}
-$all_vsan_clusters = []
-$all_vsan_lsom_clusters = []
-$vsandatastore_in_cluster = {}
-$hosts_deploy_list = []
-$easy_run_vsan_cluster = ""
-#clusters will be running grafana, should be called when cluster has ps enabled and against vsan datastore, if this will be used, local should always be the case
-$telegraf_target_clusters_map = {}
-#clusters will be running observer, should be called all the time to the local, along with remote vsan ds specified
-$observer_target_clusters_arr = [$cluster_name]
-$perfsvc_master_nodes = []
-$vsan_debug_sharing_path = ""
-$share_folder_name = "vsan_debug"
+# K8s storage testing globals (loaded from k8s-conf.yaml when test_target == "k8s")
+$k8s_kubeconfig     = entry["k8s_kubeconfig_path"] || "/opt/automation/conf/kubeconfig"
+$k8s_namespace      = entry["k8s_namespace"] || "hcibench"
+$k8s_storage_class  = entry["k8s_storage_class"] || ""
+$k8s_pod_image      = entry["k8s_pod_image"] || "hcibench/fio:latest"
+
+$k8s_access_mode    = entry["k8s_access_mode"] || "ReadWriteOnce"
+$reuse_pod          = entry["reuse_pod"].nil? ? true : entry["reuse_pod"]
+$k8s_pod_prefix         = "hcibench-pod"
+$k8s_deploy_k8s_file    = "#{$basedir}/deploy-k8s-pods.rb"
+$k8s_cleanup_file       = "#{$basedir}/cleanup-k8s-pods.rb"
+$k8s_health_file        = "#{$basedir}/pod-health-check.rb"
+$k8s_io_test_file       = "#{$basedir}/k8s-io-test.rb"
+$k8s_parse_fio_file     = "#{$basedir}/parseK8sFioResult.rb"
+$k8s_warmup_file        = "#{$basedir}/k8s-disk-warm-up.rb"
+$k8s_warmup_done_file   = "#{$basedir}/../tmp/k8s-warmedup-#{$k8s_namespace}.tmp"
 class MyJSON
   def self.valid?(value)
     result = JSON.parse(value)
