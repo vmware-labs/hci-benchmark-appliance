@@ -265,7 +265,12 @@ echo -e "\e[33mUpgrading HTTPD...\e[0m"
 tdnf upgrade httpd --nogpgcheck -y
 echo ""
 
-
+#
+# Copy Kubectl
+#************************************************
+echo -e "\e[33mCopy over Kubectl...\e[0m"
+cp -f $DIR/pkgs/kubectl* /usr/bin
+echo ""
 
 
 #
