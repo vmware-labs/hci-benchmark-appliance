@@ -220,7 +220,7 @@ $k8s_namespace      = entry["k8s_namespace"] || "hcibench"
 $k8s_storage_class  = entry["k8s_storage_class"] || ""
 $k8s_pod_image      = entry["k8s_pod_image"] || "hcibench/fio:latest"
 
-$k8s_access_mode    = entry["k8s_access_mode"] || "ReadWriteOnce"
+$k8s_access_mode    = "ReadWriteOnce"
 $reuse_pod          = entry["reuse_pod"].nil? ? true : entry["reuse_pod"]
 $k8s_pod_prefix         = "hcibench-pod"
 $k8s_deploy_k8s_file    = "#{$basedir}/deploy-k8s-pods.rb"

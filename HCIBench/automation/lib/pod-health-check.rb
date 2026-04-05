@@ -10,7 +10,7 @@
 
 require_relative "rvc-util.rb"
 require_relative "util.rb"
-require_relative "local-image-loader.rb"
+load File.expand_path("local-image-loader.rb", __dir__)
 require 'shellwords'
 
 @health_log  = "#{$log_path}/pod-health-check.log"

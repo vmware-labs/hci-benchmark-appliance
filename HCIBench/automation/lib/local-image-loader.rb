@@ -52,6 +52,7 @@ def _find_host_root_pod(node, kubectl)
   candidates = [
     ["kube-system", "k8s-app=antrea-agent"],
     ["kube-system", "app=antrea-agent"],
+    ["kube-system", "component=antrea-agent"],
     ["kube-system", "k8s-app=calico-node"],
     ["kube-system", "app=calico-node"],
     ["kube-system", "k8s-app=cilium"],
@@ -135,7 +136,7 @@ def _import_via_bootstrap_pod(node, tar_name, tar_url, kubectl, log_file)
       containers:
       - name: loader
         image: #{BUSYBOX_REF}
-        imagePullPolicy: Never
+        imagePullPolicy: IfNotPresent
         securityContext:
           privileged: true
         command:

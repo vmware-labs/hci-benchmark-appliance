@@ -6,7 +6,7 @@
 
 require_relative "rvc-util.rb"
 require_relative "util.rb"
-require_relative "local-image-loader.rb"
+load File.expand_path("local-image-loader.rb", __dir__)
 require 'fileutils'
 
 @log_file = "#{$log_path}/deploy.log"
@@ -25,7 +25,18 @@ def k8s(cmd)
 end
 
 puts "Creating namespace #{$k8s_namespace}", @log_file
-k8s("create namespace #{Shellwords.escape($k8s_namespace)} --dry-run=client -o yaml | #{KUBECTL} apply -f -")
+ns_yaml = <<~YAML
+  apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: #{$k8s_namespace}
+    labels:
+      pod-security.kubernetes.io/enforce: baseline
+      pod-security.kubernetes.io/warn: baseline
+      pod-security.kubernetes.io/audit: baseline
+YAML
+ns_out = IO.popen("#{KUBECTL} apply -f -", "w+") { |io| io.write(ns_yaml); io.close_write; io.read }
+puts ns_out, @log_file
 
 (0...$vm_num).each do |pod_idx|
   pod_name = "#{$k8s_pod_prefix}-#{pod_idx}"
@@ -85,7 +96,8 @@ k8s("create namespace #{Shellwords.escape($k8s_namespace)} --dry-run=client -o y
   YAML
 
   puts "Creating pod #{pod_name}", @log_file
-  IO.popen("#{KUBECTL} apply -f -", "w") { |io| io.write(pod_yaml) }
+  pod_out = IO.popen("#{KUBECTL} apply -f -", "w+") { |io| io.write(pod_yaml); io.close_write; io.read }
+  puts pod_out, @log_file
 end
 
 # Wait for all pods to reach Running state (up to 10 minutes)

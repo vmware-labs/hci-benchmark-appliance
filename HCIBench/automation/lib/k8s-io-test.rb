@@ -113,8 +113,7 @@ Dir.entries($self_defined_param_file_path).sort.each do |item|
   # Copy original (unadapted) param file as the canonical config record
   FileUtils.cp(src_param, "#{res_dir}/fio.cfg")
   `cp #{$basedir}/../conf/k8s-conf.yaml #{res_dir}/hcibench.cfg`
-  `sed -i '/username/d' #{res_dir}/hcibench.cfg`
-  `sed -i '/password/d' #{res_dir}/hcibench.cfg`
+  `sed -i '/username/d;/password/d;/k8s_kubeconfig_content/d;/k8s_kubeconfig_path/d' #{res_dir}/hcibench.cfg`
 
   resfile = "#{@http_place}/#{$output_path}/#{item}-#{time}-res.txt"
   cal_result_exe = "ruby #{$k8s_parse_fio_file} '#{res_dir}' > '#{$output_path_dir}'/'#{item}-#{time}-res.txt'"

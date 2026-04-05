@@ -16,8 +16,7 @@ require 'timeout'
 
 @test_status_log = "#{$log_path}/test-status.log"
 `cp -f #{$basedir}/../conf/k8s-conf.yaml #{$basedir}/../logs/hcibench.cfg`
-`sed -i '/username/d' #{$basedir}/../logs/hcibench.cfg`
-`sed -i '/password/d' #{$basedir}/../logs/hcibench.cfg`
+`sed -i '/username/d;/password/d;/k8s_kubeconfig_content/d;/k8s_kubeconfig_path/d' #{$basedir}/../logs/hcibench.cfg`
 
 `mkdir -m 755 -p #{$output_path_dir}` unless File.directory?($output_path_dir)
 
