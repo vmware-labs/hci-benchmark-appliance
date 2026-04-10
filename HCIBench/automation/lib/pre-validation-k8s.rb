@@ -83,8 +83,7 @@ def validate_k8s_fio_params
   err_msg "No workload param files found in #{$self_defined_param_file_path}!" \
     if _dir_empty?($self_defined_param_file_path)
 
-  Dir.foreach($self_defined_param_file_path) do |item|
-    next if item == '.' || item == '..'
+  param_files_to_validate.each do |item|
     param_file = "#{$self_defined_param_file_path}/#{item}"
     disk_num = `grep -cE 'filename=/dev/sd[a-z]' #{param_file} 2>/dev/null`.to_i
     if disk_num > $number_data_disk

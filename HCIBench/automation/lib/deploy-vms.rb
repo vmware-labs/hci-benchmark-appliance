@@ -32,7 +32,7 @@ if $storage_policy and not $storage_policy.empty? and not $storage_policy.strip.
   end
 end
 
-def deployOnHost(datastore, vm_num, batch, ips, hosts)
+def deployOnHost(datastore, vm_num, batch, ips, hosts, vm_prefix_override = nil)
   multiwriter_param = ""
   multiwriter_param = "-w" if $multiwriter and not $easy_run
   ip_rvc = ""
@@ -50,7 +50,7 @@ def deployOnHost(datastore, vm_num, batch, ips, hosts)
   ds_prefix = _get_ds_id_by_name(datastore)
   ds_path = _get_ds_path_escape(datastore)[0]
   ds_path_gsub = ds_path.gsub('"', '\"')
-  prefix = "#{$vm_prefix}-#{ds_prefix}-#{batch}".gsub('"', '\"')
+  prefix = "#{vm_prefix_override || $vm_prefix}-#{ds_prefix}-#{batch}".gsub('"', '\"')
   if $static_enabled
     deploy_action_escape = Shellwords.escape(%{vsantest.perf.deploy_test_vms . --resource-pool #{$resource_pool_name_escape} \
       --vm-folder #{$vm_folder_name} --datastore "#{ds_path_gsub}" --network ~dest_network #{@disk_size_var} #{@disk_num_var} \
@@ -105,26 +105,55 @@ end
 
 puts "#{ip_pools.to_s}", @log_file
 puts "#{ds_hosts_hash.to_s}", @log_file
-ds_hosts_hash.keys.each do |ds|
-  hosts_size = ds_hosts_hash[ds].size
-  batch = [[($vms_perstore/hosts_size).ceil,1].max,hosts_size].min
-  batch = 1 if $multiwriter
-  # see if each batch the number of vm deployed is equal
-  # num_batch_more != 0 means some batches has one more vm than other batches, and we have num_batch_more of batches should
-  # deploy more vm(this kind of batch we deploy vm_num_batch_more vms), and the number of normal batch is num_batch_less(deploy vm_num_batch_less vms)
-  # num_batch_more is number of batches with 1 more vm deployed
-  num_batch_more = $vms_perstore % batch
-  vm_num_batch_more = $vms_perstore / batch + 1 if num_batch_more > 0
-  vm_num_batch_less = $vms_perstore / batch
-  vm_num_deploy = 0
-  for batch_index in 0...[batch,$vms_perstore].min
-    if batch_index < num_batch_more
-      vm_num_deploy = vm_num_batch_more
-    else
-      vm_num_deploy = vm_num_batch_less
+
+def deploy_group(grp_prefix, vms_perstore, ip_pools, ds_hosts_hash, arr_node)
+  ds_hosts_hash.keys.each do |ds|
+    hosts_size = ds_hosts_hash[ds].size
+    batch = [[(vms_perstore.to_f / hosts_size).ceil, 1].max, hosts_size].min
+    batch = 1 if $multiwriter
+    num_batch_more = vms_perstore % batch
+    vm_num_batch_more = vms_perstore / batch + 1 if num_batch_more > 0
+    vm_num_batch_less = vms_perstore / batch
+    for batch_index in 0...[batch, vms_perstore].min
+      vm_num_deploy = batch_index < num_batch_more ? vm_num_batch_more : vm_num_batch_less
+      arr_node << Thread.new(ds, vm_num_deploy, batch_index, ip_pools[0...vm_num_deploy], ds_hosts_hash[ds], grp_prefix) {
+        |p1, p2, p3, p4, p5, p6| deployOnHost(p1, p2, p3, p4, p5, p6)
+      } if vm_num_deploy > 0
+      ip_pools = ip_pools.drop(vm_num_deploy)
     end
-    arr_node << Thread.new(ds,vm_num_deploy,batch_index,ip_pools[0...vm_num_deploy], ds_hosts_hash[ds]){|p1, p2, p3, p4, p5| deployOnHost(p1, p2, p3, p4, p5)} if vm_num_deploy > 0
-    ip_pools = ip_pools.drop(vm_num_deploy)
+  end
+  ip_pools
+end
+
+if !$vm_groups.empty?
+  $vm_groups.each_with_index do |grp, gi|
+    grp_prefix = "#{$vm_prefix}-g#{gi}"
+    grp_vm_num = grp["number_vm"].to_i
+    grp_vms_perstore = $total_datastore > 0 ? grp_vm_num / $total_datastore : 0
+    ip_pools = deploy_group(grp_prefix, grp_vms_perstore, ip_pools, ds_hosts_hash, arr_node)
+  end
+else
+  ds_hosts_hash.keys.each do |ds|
+    hosts_size = ds_hosts_hash[ds].size
+    batch = [[($vms_perstore/hosts_size).ceil,1].max,hosts_size].min
+    batch = 1 if $multiwriter
+    # see if each batch the number of vm deployed is equal
+    # num_batch_more != 0 means some batches has one more vm than other batches, and we have num_batch_more of batches should
+    # deploy more vm(this kind of batch we deploy vm_num_batch_more vms), and the number of normal batch is num_batch_less(deploy vm_num_batch_less vms)
+    # num_batch_more is number of batches with 1 more vm deployed
+    num_batch_more = $vms_perstore % batch
+    vm_num_batch_more = $vms_perstore / batch + 1 if num_batch_more > 0
+    vm_num_batch_less = $vms_perstore / batch
+    vm_num_deploy = 0
+    for batch_index in 0...[batch,$vms_perstore].min
+      if batch_index < num_batch_more
+        vm_num_deploy = vm_num_batch_more
+      else
+        vm_num_deploy = vm_num_batch_less
+      end
+      arr_node << Thread.new(ds,vm_num_deploy,batch_index,ip_pools[0...vm_num_deploy], ds_hosts_hash[ds]){|p1, p2, p3, p4, p5| deployOnHost(p1, p2, p3, p4, p5)} if vm_num_deploy > 0
+      ip_pools = ip_pools.drop(vm_num_deploy)
+    end
   end
 end
 

@@ -85,7 +85,73 @@ def generatePdf(path)
   `ruby /opt/automation/lib/generate_report.rb #{path}`
 end
 
+if !$vm_groups.empty?
+  # VM Groups mode: each group runs its own param file simultaneously
+  time = Time.now.to_i
+
+  if $clear_cache and vsan_datastore_names != []
+    puts "Dropping Cache on All the Hosts", @status_log_file
+    puts `ruby #{$dropcachefile}`, @log_file
+    rc = $?.exitstatus
+    if rc == 0
+      puts "Cache Dropped", @status_log_file
+    elsif rc == 200
+      puts "vSAN ESA has no Host to Drop Cache", @status_log_file
+    elsif rc == 250
+      puts "[Caution] Dropping Cache Failed, Testing will be conducted", @status_log_file
+    end
+  end
+
+  cluster_path_arr = ""
+  $observer_target_clusters_arr.each do |target_cluster|
+    target_cluster_path_pass = _get_cl_path(target_cluster)[0].gsub("\\","\\\\\\").gsub('"','\"')
+    cluster_path_arr += %{"/#{$vc_ip}/#{@dc_path_pass}/#{target_cluster_path_pass}" }
+  end
+  set_cluster_path_action_escape = Shellwords.escape(%{vsantest.perf.set_cluster_path #{cluster_path_arr}})
+  set_username_action_escape     = Shellwords.escape(%{vsantest.perf.set_vc_username "#{@vc_username}"})
+  set_password_action_escape     = Shellwords.escape(%{vsantest.perf.set_vc_password "#{@vc_password}"})
+
+  puts "Started Testing VM Groups (#{$vm_groups.size} groups in parallel)", @status_log_file
+
+  group_threads = $vm_groups.each_with_index.map do |grp, gi|
+    grp_prefix = "#{$vm_prefix}-g#{gi}"
+    grp_num    = grp["number_vm"].to_i
+    param_name = grp["param_file"].to_s
+    file_path  = "#{$self_defined_param_file_path}/#{param_name}"
+    item_label = "#{time}-group#{gi}-#{param_name}"
+    item_log   = "#{$log_path}/io-test-#{item_label}.log"
+    FileUtils.mkdir_p "#{$output_path_dir}/#{item_label}"
+
+    Thread.new do
+      `rvc #{$vc_rvc} --path #{@folder_path_escape} -c "vsantest.perf.set_vsan_perf_diag #{@vsan_perf_diag}" \
+      -c #{set_username_action_escape} -c #{set_password_action_escape} -c #{set_cluster_path_action_escape} \
+      -c 'vsantest.perf.runio_tests #{grp_prefix}-* --num-vms #{grp_num} --run-hcibench \
+      --dir "#{$output_path_dir}"/#{item_label} #{duration_var} --hcibench-param-file #{Shellwords.escape(file_path)} \
+      --tool #{$tool}' -c 'exit' -q >> #{item_log} 2>&1`
+
+      puts "Group #{gi} (#{param_name}) finished, preparing results...", @status_log_file
+      puts `cp #{Shellwords.escape(file_path)} #{$output_path_dir}/#{item_label}/#{$tool}.cfg`, @log_file
+      `cp #{$basedir}/../conf/perf-conf.yaml #{$output_path_dir}/#{item_label}/hcibench.cfg`
+      `sed -i '/username/d' #{$output_path_dir}/#{item_label}/hcibench.cfg`
+      `sed -i '/password/d' #{$output_path_dir}/#{item_label}/hcibench.cfg`
+      cal_result_exe = "ruby #{$parsevdbfile} '#{$output_path_dir}'/'#{item_label}' > '#{$output_path_dir}'/'#{item_label}-res.txt'"
+      if $tool == "fio"
+        cal_result_exe = "ruby #{$parsefiofile} '#{$output_path_dir}'/'#{item_label}' > '#{$output_path_dir}'/'#{item_label}-res.txt'"
+      end
+      `#{cal_result_exe} | tee -a #{@log_file}`
+      getVsanInfo("#{$output_path_dir}/#{item_label}/")
+      resfile = "#{@http_place}/#{$output_path}/#{item_label}-res.txt"
+      puts "Group #{gi} done. Click <a href=\"#{resfile}\" target=\"_blank\">HERE</a> to view the result", @status_log_file
+      genReport("#{$output_path_dir}/#{item_label}")
+    end
+  end
+
+  group_threads.each(&:join)
+  puts "All VM Group Tests Finished.", @status_log_file
+end
+
 for item in Dir.entries($self_defined_param_file_path).sort
+  next if !$vm_groups.empty?
   File.delete($humbug_link_file) if File.exist?($humbug_link_file)
   item_log = "#{$log_path}/io-test-#{item}.log"
   next if item == '.' or item == '..' or File.directory?(item)

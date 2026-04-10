@@ -64,6 +64,24 @@ def _dir_empty?(path)
   (Dir.entries(path) - ['.', '..']).empty?
 end
 
+# Returns the list of param file names to validate.
+# In Mixed Workload Mode, only the files referenced by groups are validated.
+# In normal mode, all files in the param directory are returned.
+def param_files_to_validate
+  if $vm_groups.nil? || $vm_groups.empty?
+    Dir.entries($self_defined_param_file_path).reject { |f|
+      f == '.' || f == '..' || File.directory?("#{$self_defined_param_file_path}/#{f}")
+    }.sort
+  else
+    files = $vm_groups.map { |g| g["param_file"].to_s }.reject(&:empty?).uniq
+    files.each do |f|
+      err_msg "Mixed Workload Mode: workload profile '#{f}' does not exist in #{$self_defined_param_file_path}!" \
+        unless File.exist?("#{$self_defined_param_file_path}/#{f}")
+    end
+    files
+  end
+end
+
 def _storage_policy_set?
   !$storage_policy.strip.empty?
 end
@@ -553,8 +571,7 @@ def validate_fio_param
       err_msg "The Fio Binary File is NOT Valid, Please Replace the fio binary file in #{$fio_source_path} and Make sure it's the only file in this directory!"
     end
     if !$easy_run
-      Dir.foreach($self_defined_param_file_path) do |item|
-        next if item == '.' or item == '..'
+      param_files_to_validate.each do |item|
         cmd_run = system("cd #{@temp_folder} && ./fio -f #{$self_defined_param_file_path}/#{item} --showcmd \
         > #{@temp_folder}out.log 2> #{@temp_folder}err.log")
         if !cmd_run
@@ -589,8 +606,7 @@ def validate_vdbench_binary
       err_msg "The VDBENCH Zip File is NOT Valid, Please Replace the vdbench zip file in /opt/output/vdbench-source and Make sure it's the only file in this directory!"
     end
     if !$easy_run
-      Dir.foreach($self_defined_param_file_path) do |item|
-        next if item == '.' or item == '..'
+      param_files_to_validate.each do |item|
         cmd_run = system("cd #{@temp_folder} && ./vdbench -s -f #{$self_defined_param_file_path}/#{item} > /dev/null 2>&1")
         if !cmd_run
           `rm -rf #{@temp_folder}; rm -f /tmp/parmfile`

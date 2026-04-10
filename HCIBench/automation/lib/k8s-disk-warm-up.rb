@@ -14,11 +14,20 @@ NS      = Shellwords.escape($k8s_namespace)
 @status_log = "#{$log_path}/test-status.log"
 @log_file   = "#{$log_path}/k8s-disk-warm-up.log"
 
+# Mirror the method/thread mapping from disk-warm-up.rb (VM path):
+#   ZERO   -> fio_zero          2 threads  (sequential write, zero-filled buffers)
+#   RANDOM -> dd_openssl equiv  4 threads  (incompressible/random data)
+#   FIO    -> fio_random_dedupe 2 threads  (dedupe-pattern data)
 case $warm_up_disk_before_testing
 when 'ZERO'
-  fio_extra = "--zero_buffers=1"
+  fio_extra  = "--zero_buffers=1"
+  nb_threads = 2
 when 'RANDOM'
-  fio_extra = "--refill_buffers=1 --scramble_buffers=1"
+  fio_extra  = "--refill_buffers=1 --buffer_compress_percentage=0"
+  nb_threads = 4
+when 'FIO'
+  fio_extra  = "--dedupe_percentage=50 --refill_buffers=1"
+  nb_threads = 2
 else
   exit(0)
 end
@@ -44,7 +53,7 @@ threads = pods.map do |pod|
     (0...$number_data_disk).each do |i|
       dev = "/mnt/pvc#{i}"
       fio_cmd = "fio --name=warmup --filename=#{dev} --rw=write " \
-                "--bs=4M --iodepth=8 --direct=1 --loops=1 #{fio_extra}"
+                "--bs=4M --iodepth=8 --direct=1 --numjobs=#{nb_threads} --loops=1 #{fio_extra}"
       puts "  [#{pod}] Filling #{dev} (#{$warm_up_disk_before_testing})", @log_file
       k8s_exec(pod, fio_cmd)
       done += 1

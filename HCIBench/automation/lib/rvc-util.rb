@@ -128,6 +128,7 @@ if $test_target != "k8s"
   $reuse_vm = entry["reuse_vm"]
   $multiwriter = entry["multi_writer"] || false
 end
+$vm_groups = entry["vm_groups"] || []
 #File path def
 $allinonetestingfile = "#{$basedir}/all-in-one-testing.rb"
 $cleanupfile = "#{$basedir}/cleanup-vm.rb"
@@ -165,6 +166,16 @@ $vdbench_source_path = "/opt/output/vdbench-source"
 $fio_source_path = "/opt/output/fio-source"
 $compute_only_cluster = ""
 $vm_num = 0 unless $vm_num
+$vm_groups ||= []
+
+if !$vm_groups.empty?
+  $vm_num = $vm_groups.map{|g| g["number_vm"].to_i}.sum
+  if $test_target == "k8s"
+    $reuse_pod = false
+  else
+    $reuse_vm = false
+  end
+end
 
 if $test_target != "k8s"
   $total_datastore = $datastore_names.count
