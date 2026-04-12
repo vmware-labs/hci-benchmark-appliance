@@ -8,7 +8,7 @@ require_relative "util.rb"
 
 @log_file = "#{$log_path}/cleanup-k8s.log"
 
-KUBECTL = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} kubectl"
+KUBECTL = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} kubectl" unless defined?(KUBECTL)
 
 def k8s(cmd)
   out = `#{KUBECTL} #{cmd} 2>&1`

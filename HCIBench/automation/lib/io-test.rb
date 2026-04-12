@@ -111,14 +111,46 @@ if !$vm_groups.empty?
   set_username_action_escape     = Shellwords.escape(%{vsantest.perf.set_vc_username "#{@vc_username}"})
   set_password_action_escape     = Shellwords.escape(%{vsantest.perf.set_vc_password "#{@vc_password}"})
 
+  path_testname = Shellwords.escape($output_path.gsub(".","-").gsub(" ","_"))
+
+  if @debug_mode
+    _create_shared_folder($output_path_dir + "/mixed-#{time}",$share_folder_name)
+    @vmk_collected = false
+    Thread.start { collectVmkStats("#{$output_path_dir}/mixed-#{time}",@sleep_time)}
+  end
+
   puts "Started Testing VM Groups (#{$vm_groups.size} groups in parallel)", @status_log_file
+
+  # Grafana monitoring links for each group
+  $vm_groups.each_with_index do |grp, gi|
+    param_name = grp["param_file"].to_s
+    path_testcase = Shellwords.escape("group#{gi}-#{param_name}".gsub(".","-").gsub(" ","_"))
+    puts %{<a href="http://#{@ip_url}:3000/d/#{$tool}/hcibench-#{$tool}-monitoring?orgId=1&var-Testname=#{path_testname}&var-Testcase=#{path_testcase}-#{time}" \
+    target="_blank">HERE TO MONITOR GROUP #{gi} #{$tool.upcase} PERFORMANCE</a>},@status_log_file
+  end
+
+  # vSAN cluster monitoring links
+  if $telegraf_target_clusters_map != {}
+    if $vsan_version == 1
+      `ruby /opt/automation/lib/run_telegraf.rb`
+      $telegraf_target_clusters_map.keys.each do |name|
+        puts %{<a href="http://#{@ip_url}:3000/d/vsan/vsan-overview?orgId=1&refresh=10s&var-datasource=InfluxDB&var-cluster=#{$telegraf_target_clusters_map[name]}" \
+        target="_blank">HERE TO MONITOR vSAN Cluster #{name} PERFORMANCE</a>},@status_log_file
+      end
+    else
+      $telegraf_target_clusters_map.keys.each do |name|
+        support_url = _get_vsan_support_url(name)
+        puts %{<a href="#{support_url}" target="_blank">HERE TO MONITOR vSAN Cluster #{name} PERFORMANCE</a>},@status_log_file
+      end
+    end
+  end
 
   group_threads = $vm_groups.each_with_index.map do |grp, gi|
     grp_prefix = "#{$vm_prefix}-g#{gi}"
     grp_num    = grp["number_vm"].to_i
     param_name = grp["param_file"].to_s
     file_path  = "#{$self_defined_param_file_path}/#{param_name}"
-    item_label = "#{time}-group#{gi}-#{param_name}"
+    item_label = "group#{gi}-#{param_name}-#{time}"
     item_log   = "#{$log_path}/io-test-#{item_label}.log"
     FileUtils.mkdir_p "#{$output_path_dir}/#{item_label}"
 
@@ -140,13 +172,39 @@ if !$vm_groups.empty?
       end
       `#{cal_result_exe} | tee -a #{@log_file}`
       getVsanInfo("#{$output_path_dir}/#{item_label}/")
+      if File.exist?($humbug_link_file)
+        link = File.read($humbug_link_file)
+        `echo "\n\nvSAN Performance Stats Graph: #{link}" >> "#{$output_path_dir}/#{item_label}-res.txt"`
+      end
+      if File.exist?($vsan_cpu_usage_file)
+        `cp #{$vsan_cpu_usage_file} #{$output_path_dir}/#{item_label}/`
+      end
       resfile = "#{@http_place}/#{$output_path}/#{item_label}-res.txt"
       puts "Group #{gi} done. Click <a href=\"#{resfile}\" target=\"_blank\">HERE</a> to view the result", @status_log_file
+      puts %{Generating PDF Report for Group #{gi}...}, @status_log_file
       genReport("#{$output_path_dir}/#{item_label}")
     end
   end
 
   group_threads.each(&:join)
+
+  if $telegraf_target_clusters_map != {} and $vsan_version == 1
+    `ruby /opt/automation/lib/stop_all_telegraf.rb`
+  end
+
+  if @debug_mode
+    end_time = Time.now.to_i
+    debug_threads = []
+    debug_threads << Thread.new{collectSupportBundle("#{$output_path_dir}/mixed-#{time}", time, end_time)}
+    if @vmk_collected
+      debug_threads << Thread.new{processVmkStats("#{$output_path_dir}/mixed-#{time}/#{$share_folder_name}")}
+      puts %{Collecting VM Support bundle from ESXi hosts and Parsing vmkstats files...},@status_log_file
+    else
+      puts %{Collecting VM Support bundle from ESXi hosts...},@status_log_file
+    end
+    debug_threads.each{|t|t.join}
+  end
+
   puts "All VM Group Tests Finished.", @status_log_file
 end
 

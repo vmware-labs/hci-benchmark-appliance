@@ -58,37 +58,41 @@ if $?.exitstatus != 0
 end
 puts "K8s cluster reachable. Nodes:\n#{out}", @test_status_log
 
-# --- Deploy or reuse pods ---
-pods_reused = false
+# --- Deploy or reuse PVCs ---
+pvcs_reused = false
 if $reuse_pod
-  puts "Checking existing pods for compatibility...", @test_status_log
+  puts "Checking existing PVCs for compatibility...", @test_status_log
   system("ruby #{$k8s_health_file}")
   if $?.exitstatus == 0
-    puts "Reusing existing #{$vm_num} compatible hcibench pods in namespace #{$k8s_namespace}.", @test_status_log
-    pods_reused = true
+    puts "Reusing existing PVCs in namespace #{$k8s_namespace}.", @test_status_log
+    pvcs_reused = true
+    # Delete old pods (they may have stale processes) — PVCs are kept
+    puts "Deleting old pods (PVCs preserved)...", @test_status_log
+    `#{KUBECTL} delete pods -n #{NS} -l app=hcibench --ignore-not-found=true --wait=true 2>/dev/null`
   else
-    puts "Existing pods are absent or incompatible — redeploying.", @test_status_log
+    puts "Existing PVCs are absent or incompatible — full redeploy.", @test_status_log
   end
 end
 
-unless pods_reused
+unless pvcs_reused
   # Fresh deploy — clear warmup flag so prep runs on new PVCs
   File.delete($k8s_warmup_done_file) if File.exist?($k8s_warmup_done_file)
 
-  # Clean up any stale pods/PVCs before deploying fresh ones
+  # Clean up any stale pods and PVCs before deploying fresh ones
   `#{KUBECTL} delete pods -n #{NS} -l app=hcibench --ignore-not-found=true --wait=true 2>/dev/null`
   `#{KUBECTL} delete pvc   -n #{NS} -l app=hcibench --ignore-not-found=true 2>/dev/null`
-
-  puts "Deploying #{$vm_num} pods with #{$number_data_disk} PVCs each (#{$size_data_disk} Gi, StorageClass: #{$k8s_storage_class.empty? ? '(default)' : $k8s_storage_class})...", @test_status_log
-  `ruby #{$k8s_deploy_k8s_file}`
-  rc = $?.exitstatus
-  if rc == 253
-    k8s_failure_handler("Pod deployment timed out")
-  elsif rc != 0
-    k8s_failure_handler("Pod deployment")
-  end
-  puts "Deployment finished.", @test_status_log
 end
+
+# Always deploy pods (fresh pods bind to existing or new PVCs via kubectl apply)
+puts "Deploying #{$vm_num} pods with #{$number_data_disk} PVCs each (#{$size_data_disk} Gi, StorageClass: #{$k8s_storage_class.empty? ? '(default)' : $k8s_storage_class})#{pvcs_reused ? ' — reusing existing PVCs' : ''}...", @test_status_log
+`ruby #{$k8s_deploy_k8s_file}`
+rc = $?.exitstatus
+if rc == 253
+  k8s_failure_handler("Pod deployment timed out")
+elsif rc != 0
+  k8s_failure_handler("Pod deployment")
+end
+puts "Deployment finished.", @test_status_log
 
 # --- Disk warm-up ---
 if $warm_up_disk_before_testing != "NONE"

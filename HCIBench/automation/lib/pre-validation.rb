@@ -29,9 +29,13 @@ require_relative 'validate_subnets.rb'
 def prepareLogs
   `mkdir -p /opt/automation/logs/prevalidation`
   `rm -rf #{$basedir}/../logs/prevalidation/*`
-  `cp #{$basedir}/../conf/perf-conf.yaml #{$basedir}/../logs/prevalidation/hcibench.cfg`
-  `sed -i '/username/d' #{$basedir}/../logs/prevalidation/hcibench.cfg`
-  `sed -i '/password/d' #{$basedir}/../logs/prevalidation/hcibench.cfg`
+  if $test_target == "k8s"
+    `cp #{$basedir}/../conf/k8s-conf.yaml #{$basedir}/../logs/prevalidation/hcibench.cfg`
+    `sed -i '/username/d;/password/d;/k8s_kubeconfig_content/d;/k8s_kubeconfig_path/d' #{$basedir}/../logs/prevalidation/hcibench.cfg`
+  else
+    `cp #{$basedir}/../conf/perf-conf.yaml #{$basedir}/../logs/prevalidation/hcibench.cfg`
+    `sed -i '/username/d;/password/d' #{$basedir}/../logs/prevalidation/hcibench.cfg`
+  end
   `cat /etc/hcibench_version > #{@log_file}`
 end
 

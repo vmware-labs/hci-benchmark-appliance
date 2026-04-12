@@ -15,8 +15,8 @@ require 'shellwords'
 require_relative "rvc-util.rb"
 require_relative "util.rb"
 
-KUBECTL = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} kubectl"
-NS      = Shellwords.escape($k8s_namespace)
+KUBECTL = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} kubectl" unless defined?(KUBECTL)
+NS      = Shellwords.escape($k8s_namespace) unless defined?(NS)
 
 @status_log = "#{$log_path}/test-status.log"
 @log_file   = "#{$log_path}/k8s-io-test.log"
@@ -60,41 +60,92 @@ if !$self_defined_param_file_path || !File.directory?($self_defined_param_file_p
   $self_defined_param_file_path = "/opt/automation/fio-param-files"
 end
 
-duration_var = ""
+$k8s_duration_var = ""
 if $testing_duration && $testing_duration.is_a?(Integer)
-  duration_var = "--runtime=#{$testing_duration} --time_based=1"
+  $k8s_duration_var = "--runtime=#{$testing_duration} --time_based=1"
 end
 
-def run_fio_on_pods(pods, adapted_param, param_name, res_dir)
+K8S_FIO_GRAPHITE = "/opt/output/vm-template/graphites/k8s_fio_graphite.py" unless defined?(K8S_FIO_GRAPHITE)
+
+def run_fio_on_pods(pods, adapted_param, param_name, res_dir, testname, testcase)
+  graphite_pids = []
+  gpid_mutex = Mutex.new
   pods.map do |pod|
     Thread.new do
       remote_param  = "/tmp/#{param_name}"
       result_remote = "/tmp/#{param_name}-result.json"
       result_local  = "#{res_dir}/#{pod}-k8s-0.json"
       system("#{KUBECTL} cp #{Shellwords.escape(adapted_param)} #{NS}/#{pod}:#{remote_param} >> #{@log_file} 2>&1")
-      fio_cmd = "fio #{remote_param} --output-format=json --output=#{result_remote}"
-      fio_cmd += " #{duration_var}" unless duration_var.empty?
-      puts "  [#{pod}] Running: #{fio_cmd}", @log_file
-      system("#{KUBECTL} exec -n #{NS} #{pod} -- sh -c #{Shellwords.escape(fio_cmd)} >> #{@log_file} 2>&1")
+
+      # Kill any leftover fio from a previous run, clear previous output, then start fio
+      system("#{KUBECTL} exec -n #{NS} #{pod} -- sh -c 'killall fio 2>/dev/null; sleep 1' >> #{@log_file} 2>&1")
+      bg_cmd = "> #{result_remote}; nohup fio #{remote_param} --output-format=json --output=#{result_remote} --status-interval=5"
+      bg_cmd += " #{$k8s_duration_var}" unless $k8s_duration_var.empty?
+      bg_cmd += " > /tmp/fio.log 2>&1 &"
+      system("#{KUBECTL} exec -n #{NS} #{pod} -- sh -c #{Shellwords.escape(bg_cmd)} >> #{@log_file} 2>&1")
+
+      # Launch local graphite reporter for this pod
+      metric_prefix = "fio.#{testname}.#{testcase}.#{pod}"
+      graphite_cmd = "python3 #{K8S_FIO_GRAPHITE} '#{KUBECTL}' #{NS} #{pod} #{result_remote} '#{metric_prefix}'"
+      graphite_log = "#{res_dir}/#{pod}-graphite.log"
+      gpid = spawn(graphite_cmd, [:out, :err] => [graphite_log, "a"])
+      gpid_mutex.synchronize { graphite_pids << gpid }
+      puts "  [#{pod}] fio started, graphite reporter pid=#{gpid}", @log_file
+
+      # Wait for fio to finish in the pod (ignore zombie processes)
+      loop do
+        sleep(5)
+        out, _ = k8s("exec -n #{NS} #{pod} -- sh -c 'for p in $(pgrep -x fio); do grep -q zombie /proc/$p/status 2>/dev/null || echo $p; done'")
+        break if out.strip.empty?
+      end
+      puts "  [#{pod}] fio finished", @log_file
+
+      # Collect final results
       system("#{KUBECTL} cp #{NS}/#{pod}:#{result_remote} #{Shellwords.escape(result_local)} >> #{@log_file} 2>&1")
       puts "  [#{pod}] Results collected to #{result_local}", @log_file
     end
+  end.tap do |threads|
+    # Store graphite pids for cleanup after all threads join
+    threads.define_singleton_method(:graphite_pids) { graphite_pids }
   end
 end
+
+def stop_graphite_reporters(threads)
+  return unless threads.respond_to?(:graphite_pids)
+  threads.graphite_pids.each do |pid|
+    begin
+      Process.kill("TERM", pid)
+      Process.wait(pid)
+    rescue Errno::ESRCH, Errno::ECHILD
+      # already exited
+    end
+  end
+end
+
+path_testname = Shellwords.escape($output_path.gsub(".","-").gsub(" ","_"))
 
 if !$vm_groups.empty?
   # Mixed Workload Mode: run each group's param file in parallel against its labeled pods
   time = Time.now.to_i
   puts "Started Testing K8s Mixed Workload Mode (#{$vm_groups.size} groups in parallel)", @status_log
 
+  # Grafana monitoring links for each group
+  $vm_groups.each_with_index do |grp, gi|
+    param_name = grp["param_file"].to_s
+    path_testcase = Shellwords.escape("group#{gi}-#{param_name}".gsub(".","-").gsub(" ","_"))
+    puts %{<a href="http://#{@ip_url}:3000/d/fio/hcibench-fio-monitoring?orgId=1&var-Testname=#{path_testname}&var-Testcase=#{path_testcase}-#{time}" \
+    target="_blank">HERE TO MONITOR GROUP #{gi} FIO PERFORMANCE</a>},@status_log
+  end
+
   group_threads = $vm_groups.each_with_index.map do |grp, gi|
     param_name = grp["param_file"].to_s
     src_param  = "#{$self_defined_param_file_path}/#{param_name}"
-    item_label = "#{time}-group#{gi}-#{param_name}"
+    item_label = "group#{gi}-#{param_name}-#{time}"
     res_dir    = "#{$output_path_dir}/#{item_label}"
     FileUtils.mkdir_p(res_dir)
     adapted_param = "#{res_dir}/#{param_name}-k8s.cfg"
     adapt_param_file(src_param, adapted_param)
+    testcase = "group#{gi}-#{param_name}".gsub(".","-").gsub(" ","_")
 
     Thread.new do
       puts "Group #{gi} (#{param_name}): starting...", @status_log
@@ -104,8 +155,10 @@ if !$vm_groups.empty?
         puts "[ERROR] No pods found for group #{gi} (label hci-group=g#{gi})", @status_log
         next
       end
-      threads = run_fio_on_pods(group_pods, adapted_param, param_name, res_dir)
+      threads = run_fio_on_pods(group_pods, adapted_param, param_name, res_dir,
+                                path_testname, "#{testcase}-#{time}")
       threads.each(&:join)
+      stop_graphite_reporters(threads)
 
       FileUtils.cp(src_param, "#{res_dir}/fio.cfg")
       `cp #{$basedir}/../conf/k8s-conf.yaml #{res_dir}/hcibench.cfg`
@@ -120,6 +173,7 @@ if !$vm_groups.empty?
 end
 
 if $vm_groups.empty?
+  cached_pods = pod_names
   Dir.entries($self_defined_param_file_path).sort.each do |item|
     next if item == '.' || item == '..' || File.directory?(item)
 
@@ -131,16 +185,22 @@ if $vm_groups.empty?
     adapted_param = "#{res_dir}/#{item}-k8s.cfg"
     adapt_param_file(src_param, adapted_param)
 
-    puts "Started Testing #{item}", @status_log
+    path_testcase = Shellwords.escape(item.gsub(".","-").gsub(" ","_"))
 
-    pods = pod_names
+    puts "Started Testing #{item}", @status_log
+    puts %{<a href="http://#{@ip_url}:3000/d/fio/hcibench-fio-monitoring?orgId=1&var-Testname=#{path_testname}&var-Testcase=#{path_testcase}-#{time}" \
+    target="_blank">HERE TO MONITOR FIO PERFORMANCE</a>},@status_log
+
+    pods = cached_pods
     if pods.empty?
       puts "[ERROR] No hcibench pods found in namespace #{$k8s_namespace}", @status_log
       next
     end
 
-    threads = run_fio_on_pods(pods, adapted_param, item, res_dir)
+    threads = run_fio_on_pods(pods, adapted_param, item, res_dir,
+                              path_testname, "#{path_testcase}-#{time}")
     threads.each(&:join)
+    stop_graphite_reporters(threads)
 
     puts "Workload #{item} finished, preparing the results...", @status_log
 

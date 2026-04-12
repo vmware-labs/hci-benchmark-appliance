@@ -38,29 +38,33 @@ YAML
 ns_out = IO.popen("#{KUBECTL} apply -f -", "w+") { |io| io.write(ns_yaml); io.close_write; io.read }
 puts ns_out, @log_file
 
+def build_pvc_yaml(pvc_name, pod_name, group_label)
+  labels = "    app: hcibench\n    pod: #{pod_name}"
+  labels += "\n    hci-group: #{group_label}" unless group_label.empty?
+  yaml = "apiVersion: v1\n"
+  yaml += "kind: PersistentVolumeClaim\n"
+  yaml += "metadata:\n"
+  yaml += "  name: #{pvc_name}\n"
+  yaml += "  namespace: #{$k8s_namespace}\n"
+  yaml += "  labels:\n#{labels}\n"
+  yaml += "spec:\n"
+  yaml += "  volumeMode: Block\n"
+  yaml += "  accessModes: [\"#{$k8s_access_mode}\"]\n"
+  yaml += "  storageClassName: #{$k8s_storage_class}\n" unless $k8s_storage_class.empty?
+  yaml += "  resources:\n"
+  yaml += "    requests:\n"
+  yaml += "      storage: #{$size_data_disk}Gi\n"
+  yaml
+end
+
 def create_pod(pod_name, group_label, log_file)
-  sc_line = $k8s_storage_class.empty? ? "" : "        storageClassName: #{$k8s_storage_class}\n"
   pvc_threads = (0...$number_data_disk).map do |disk_idx|
     Thread.new do
       pvc_name = "#{pod_name}-pvc-#{disk_idx}"
-      pvc_yaml = <<~YAML
-        apiVersion: v1
-        kind: PersistentVolumeClaim
-        metadata:
-          name: #{pvc_name}
-          namespace: #{$k8s_namespace}
-          labels:
-            app: hcibench
-            pod: #{pod_name}#{group_label.empty? ? "" : "\n            hci-group: #{group_label}"}
-        spec:
-          volumeMode: Block
-          accessModes: ["#{$k8s_access_mode}"]
-  #{sc_line}          resources:
-            requests:
-              storage: #{$size_data_disk}Gi
-      YAML
+      pvc_yaml = build_pvc_yaml(pvc_name, pod_name, group_label)
       puts "Creating PVC #{pvc_name}", log_file
-      IO.popen("#{KUBECTL} apply -f -", "w") { |io| io.write(pvc_yaml) }
+      pvc_out = IO.popen("#{KUBECTL} apply -f -", "w+") { |io| io.write(pvc_yaml); io.close_write; io.read }
+      puts pvc_out, log_file
     end
   end
   pvc_threads.each(&:join)

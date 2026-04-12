@@ -170,11 +170,6 @@ $vm_groups ||= []
 
 if !$vm_groups.empty?
   $vm_num = $vm_groups.map{|g| g["number_vm"].to_i}.sum
-  if $test_target == "k8s"
-    $reuse_pod = false
-  else
-    $reuse_vm = false
-  end
 end
 
 if $test_target != "k8s"

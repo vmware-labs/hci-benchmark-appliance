@@ -5,6 +5,8 @@
 # Inherits: puts (timestamped+logged), err_msg, warning_msg, validate_subnets,
 #            validate_testing_config, and all globals from rvc-util.rb.
 
+require 'time'
+
 KUBECTL_PRECHECK = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} kubectl"
 
 def validate_k8s_config_fields
@@ -33,15 +35,57 @@ end
 
 def validate_k8s_connectivity
   puts "Validating K8s cluster connectivity..."
+
+  # Check for certificate issues before general connectivity
   out = `#{KUBECTL_PRECHECK} get nodes --no-headers 2>&1`
-  err_msg "Cannot reach K8s cluster using kubeconfig #{$k8s_kubeconfig}:\n#{out.strip}" \
-    if $?.exitstatus != 0
+  if $?.exitstatus != 0
+    if out.include?("certificate has expired") || out.include?("x509:")
+      # Extract server URL from kubeconfig for cert check
+      server_url = `#{KUBECTL_PRECHECK} config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null`.strip
+      cert_details = ""
+      if server_url =~ %r{https://([^:/]+):?(\d*)}
+        host = $1
+        port = $2.empty? ? "443" : $2
+        cert_dates = `echo | openssl s_client -connect #{host}:#{port} -servername #{host} 2>/dev/null | openssl x509 -noout -dates 2>/dev/null`.strip
+        cert_details = "\nServer certificate info (#{host}:#{port}):\n  #{cert_dates.gsub("\n", "\n  ")}" unless cert_dates.empty?
+      end
+      err_msg "K8s cluster certificate is expired or not yet valid. " \
+              "Please renew the cluster certificates (e.g. 'kubeadm certs renew all' on the control plane).#{cert_details}\n" \
+              "kubectl output: #{out.strip}"
+    else
+      err_msg "Cannot reach K8s cluster using kubeconfig #{$k8s_kubeconfig}:\n#{out.strip}"
+    end
+  end
+
   node_lines = out.strip.split("\n")
   puts "K8s cluster reachable. #{node_lines.size} node(s):"
   node_lines.each { |line| puts "  #{line}" }
   not_ready = node_lines.reject { |l| l.split[1] == "Ready" }
   warning_msg "The following nodes are not Ready and may affect test pod scheduling:\n#{not_ready.join("\n")}" \
     unless not_ready.empty?
+
+  # Proactive certificate expiry warning
+  server_url = `#{KUBECTL_PRECHECK} config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null`.strip
+  if server_url =~ %r{https://([^:/]+):?(\d*)}
+    host = $1
+    port = $2.empty? ? "443" : $2
+    expiry_str = `echo | openssl s_client -connect #{host}:#{port} -servername #{host} 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null`.strip
+    if expiry_str =~ /notAfter=(.*)/
+      begin
+        expiry_time = Time.parse($1)
+        days_left = ((expiry_time - Time.now) / 86400).to_i
+        if days_left < 0
+          err_msg "K8s API server certificate expired #{-days_left} day(s) ago (#{expiry_time}). Please renew cluster certificates."
+        elsif days_left < 30
+          warning_msg "K8s API server certificate expires in #{days_left} day(s) (#{expiry_time}). Consider renewing soon."
+        else
+          puts "K8s API server certificate valid until #{expiry_time} (#{days_left} days remaining)"
+        end
+      rescue ArgumentError
+        # Could not parse date, skip
+      end
+    end
+  end
 end
 
 def validate_k8s_storage_class
@@ -56,7 +100,7 @@ def validate_k8s_storage_class
         default_sc = default_line.split.first
         puts "Default StorageClass: #{default_sc}"
       else
-        warning_msg "No default StorageClass found in the cluster. PVC provisioning will fail unless a StorageClass is specified."
+        err_msg "No default StorageClass found in the cluster. Please specify a StorageClass in HCIBench or set a default StorageClass in the cluster."
       end
     end
   else
