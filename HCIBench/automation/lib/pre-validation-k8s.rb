@@ -64,6 +64,15 @@ def validate_k8s_connectivity
   warning_msg "The following nodes are not Ready and may affect test pod scheduling:\n#{not_ready.join("\n")}" \
     unless not_ready.empty?
 
+  # Check worker node count vs requested pods
+  worker_lines = node_lines.reject { |l| l.include?("control-plane") }
+  ready_workers = worker_lines.select { |l| l.split[1] == "Ready" }
+  if ready_workers.size < $vm_num
+    warning_msg "Number of ready worker nodes (#{ready_workers.size}) is less than the number of pods (#{$vm_num}). " \
+                "Multiple pods will be scheduled on the same node, which may not reflect realistic per-host performance. " \
+                "Recommendation: set number of pods to #{ready_workers.size} or fewer for even distribution across worker nodes."
+  end
+
   # Proactive certificate expiry warning
   server_url = `#{KUBECTL_PRECHECK} config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null`.strip
   if server_url =~ %r{https://([^:/]+):?(\d*)}

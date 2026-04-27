@@ -229,6 +229,8 @@ end
 
 def validate_datastore_info
   if $datastore_names
+    deploy_hosts = _get_deploy_hosts_list
+    hosts_label = $deploy_on_hosts ? "selected hosts" : "hosts in cluster #{$cluster_name}"
     $datastore_names.each do |datastore_name|
       err_msg "Datastore #{datastore_name} doesn't exist!" if not _has_resource "ds",datastore_name
       puts "Datastore #{datastore_name} Validated"
@@ -243,11 +245,11 @@ def validate_datastore_info
       datastore_type ,datastore_ref = _get_moid("ds",datastore_name)
       @ds_ids << datastore_ref
 
-      puts "Checking If Datastore #{datastore_name} is accessible from any of the hosts of #{$cluster_name}..."
+      puts "Checking If Datastore #{datastore_name} is accessible from any of the #{hosts_label}..."
       ds_hosts_list = _get_hosts_list_by_ds_name(datastore_name)
-      accessible_hosts = _get_deploy_hosts_list & ds_hosts_list
+      accessible_hosts = deploy_hosts & ds_hosts_list
       if accessible_hosts.empty?
-        err_msg "Datastore #{datastore_name} is not accessible from any of hosts in cluster #{$cluster_name}"
+        err_msg "Datastore #{datastore_name} is not accessible from any of the #{hosts_label}: #{deploy_hosts.join(', ')}"
       else
         puts "Datastore #{datastore_name} is accessible from hosts #{accessible_hosts.join(', ')}"
       end

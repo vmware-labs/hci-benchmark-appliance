@@ -96,7 +96,7 @@ puts "Deployment finished.", @test_status_log
 
 # --- Disk warm-up ---
 if $warm_up_disk_before_testing != "NONE"
-  if pods_reused && File.exist?($k8s_warmup_done_file)
+  if pvcs_reused && File.exist?($k8s_warmup_done_file)
     puts "Disk Preparation Skipped — PVCs were already prepped in a previous run.", @test_status_log
   else
     puts "Disk Preparation Started (#{$warm_up_disk_before_testing}).", @test_status_log
