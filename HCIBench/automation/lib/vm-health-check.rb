@@ -224,4 +224,23 @@ vms.each do |s|
 end
 tnode.each{|t|t.join}
 
+# Warn if storage policy changed since last deploy
+if $storage_policy && !$storage_policy.strip.empty?
+  prev_cfg = "#{$log_path}/hcibench.cfg"
+  if File.exist?(prev_cfg)
+    prev_policy = ""
+    File.readlines(prev_cfg).each do |line|
+      if line =~ /^storage_policy:\s*(.+)/
+        prev_policy = $1.strip.gsub(/^['"]|['"]$/, '')
+        break
+      end
+    end
+    if !prev_policy.empty? && prev_policy != $storage_policy
+      puts "[WARNING] Storage policy changed from '#{prev_policy}' to '#{$storage_policy}'. " \
+           "Reused VMs still have the old policy applied. " \
+           "To apply the new policy, disable 'Reuse VMs' and redeploy.", @vm_health_check_file
+    end
+  end
+end
+
 puts "DONE: VMs are healthy and could be reused for I/O testing",@vm_health_check_file

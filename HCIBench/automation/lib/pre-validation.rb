@@ -263,6 +263,22 @@ def validate_storage_policy
     compliant_ids = _get_compliant_datastore_ids_escape($storage_policy) || []
     err_msg "Unable to find the storage policy #{$storage_policy} or Unable to find compliant datastores of policy #{$storage_policy}" if compliant_ids.empty?
     err_msg "The storage policy #{$storage_policy} is not compatible with any of the datastores specified." if (@ds_ids & compliant_ids).empty?
+    if $reuse_vm
+      prev_cfg = "#{$basedir}/../logs/hcibench.cfg"
+      if File.exist?(prev_cfg)
+        prev_policy = ""
+        File.readlines(prev_cfg).each do |line|
+          if line =~ /^storage_policy:\s*(.+)/
+            prev_policy = $1.strip.gsub(/^['"]|['"]$/, '')
+            break
+          end
+        end
+        if !prev_policy.empty? && prev_policy != $storage_policy
+          warning_msg "Storage policy changed from '#{prev_policy}' to '#{$storage_policy}', but 'Reuse VMs' is enabled. " \
+                      "Reused VMs will keep the old policy. Disable 'Reuse VMs' and redeploy to apply the new policy."
+        end
+      end
+    end
   end
 end
 
