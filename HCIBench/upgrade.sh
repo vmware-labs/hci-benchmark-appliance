@@ -202,7 +202,7 @@ systemctl enable nfs-server rpcbind
 echo "install pip2 pkgs"
 pip2 install six requests
 echo "install pip3 pkgs"
-pip3 install graphitesend==0.10.0
+$CMD_PYTHON -m pip install graphitesend==0.10.0
 
 #
 # RVC
