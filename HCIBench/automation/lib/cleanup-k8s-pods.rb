@@ -8,7 +8,7 @@ require_relative "util.rb"
 
 @log_file = "#{$log_path}/cleanup-k8s.log"
 
-KUBECTL = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} kubectl" unless defined?(KUBECTL)
+KUBECTL = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} #{$k8s_cli}" unless defined?(KUBECTL)
 
 def k8s(cmd)
   out = `#{KUBECTL} #{cmd} 2>&1`
@@ -25,6 +25,9 @@ puts "Deleting namespace #{$k8s_namespace}...", @log_file
 k8s("delete namespace #{Shellwords.escape($k8s_namespace)} --ignore-not-found=true")
 
 k8s("delete ds hcibench-image-loader -n kube-system --ignore-not-found=true 2>/dev/null")
+# Clean up OpenShift SCC bindings and loader service account
+`#{KUBECTL} adm policy remove-scc-from-user privileged -n kube-system -z hcibench-loader 2>/dev/null`
+k8s("delete sa hcibench-loader -n kube-system --ignore-not-found=true")
 File.delete($k8s_warmup_done_file) if File.exist?($k8s_warmup_done_file)
 puts "Cleanup complete.", @log_file
 exit(0)

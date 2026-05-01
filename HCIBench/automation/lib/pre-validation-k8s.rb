@@ -7,7 +7,7 @@
 
 require 'time'
 
-KUBECTL_PRECHECK = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} kubectl"
+KUBECTL_PRECHECK = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} #{$k8s_cli}"
 
 def validate_k8s_config_fields
   puts "Validating K8s configuration fields..."

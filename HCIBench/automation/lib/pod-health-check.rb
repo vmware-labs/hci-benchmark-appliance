@@ -20,7 +20,7 @@ require 'json'
 @health_log  = "#{$log_path}/pod-health-check.log"
 @status_log  = "#{$log_path}/test-status.log"
 
-KUBECTL = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} kubectl" unless defined?(KUBECTL)
+KUBECTL = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} #{$k8s_cli}" unless defined?(KUBECTL)
 NS      = Shellwords.escape($k8s_namespace) unless defined?(NS)
 
 def k8s(cmd)

@@ -38,6 +38,7 @@ def genReport(result_path)
     fio_small_imgs = Array.[](2,3,13,14,23,25,10,26,6,12)
     fio_large_imgs = Array.[](5,7,8,11,22,9,21)
     for i in fio_small_imgs
+      puts "curl 'http://#{$docker_ip}:3000/render/d-solo/fio/hcibench-fio-monitoring?orgId=1&var-Testname=#{path_testname}&var-Testcase=#{path_testcase}&from=#{from_time}&to=#{to_time}&panelId=#{i}&width=300&height=150&tz=#{timezone}'>#{template_path}/images/fio/#{i}.png"
       `curl 'http://#{$docker_ip}:3000/render/d-solo/fio/hcibench-fio-monitoring?orgId=1&var-Testname=#{path_testname}&var-Testcase=#{path_testcase}&from=#{from_time}&to=#{to_time}&panelId=#{i}&width=300&height=150&tz=#{timezone}'>#{template_path}/images/fio/#{i}.png`
     end
     for i in fio_large_imgs

@@ -8,7 +8,7 @@ require_relative "rvc-util.rb"
 require_relative "util.rb"
 require 'shellwords'
 
-KUBECTL = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} kubectl" unless defined?(KUBECTL)
+KUBECTL = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} #{$k8s_cli}" unless defined?(KUBECTL)
 NS      = Shellwords.escape($k8s_namespace) unless defined?(NS)
 
 @status_log = "#{$log_path}/test-status.log"

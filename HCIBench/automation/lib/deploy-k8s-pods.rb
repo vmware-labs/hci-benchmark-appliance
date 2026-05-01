@@ -12,7 +12,7 @@ require 'fileutils'
 @log_file = "#{$log_path}/deploy.log"
 `rm -f #{@log_file}`
 
-KUBECTL = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} kubectl"
+KUBECTL = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} #{$k8s_cli}"
 
 # If a bundled tar exists for this image, pre-load it onto every K8s node.
 # Returns [image_ref, pull_policy] — pull_policy is Never when loaded locally.
@@ -31,12 +31,24 @@ ns_yaml = <<~YAML
   metadata:
     name: #{$k8s_namespace}
     labels:
-      pod-security.kubernetes.io/enforce: baseline
-      pod-security.kubernetes.io/warn: baseline
-      pod-security.kubernetes.io/audit: baseline
+      pod-security.kubernetes.io/enforce: privileged
+      pod-security.kubernetes.io/warn: privileged
+      pod-security.kubernetes.io/audit: privileged
 YAML
 ns_out = IO.popen("#{KUBECTL} apply -f -", "w+") { |io| io.write(ns_yaml); io.close_write; io.read }
 puts ns_out, @log_file
+
+# Create service account and grant privileged SCC (for OpenShift raw block access)
+sa_yaml = <<~YAML
+  apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: hcibench-fio
+    namespace: #{$k8s_namespace}
+YAML
+IO.popen("#{KUBECTL} apply -f -", "w+") { |io| io.write(sa_yaml); io.close_write; io.read }
+scc_out = `#{KUBECTL} adm policy add-scc-to-user privileged -n #{$k8s_namespace} -z hcibench-fio 2>/dev/null`
+puts scc_out, @log_file unless scc_out.strip.empty?
 
 def build_pvc_yaml(pvc_name, pod_name, group_label)
   labels = "    app: hcibench\n    pod: #{pod_name}"
@@ -86,6 +98,7 @@ def create_pod(pod_name, group_label, log_file)
       labels:
         app: hcibench#{extra_labels}
     spec:
+      serviceAccountName: hcibench-fio
       restartPolicy: Never
       containers:
       - name: fio

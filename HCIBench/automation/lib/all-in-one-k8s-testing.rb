@@ -20,7 +20,7 @@ require 'timeout'
 
 `mkdir -m 755 -p #{$output_path_dir}` unless File.directory?($output_path_dir)
 
-KUBECTL = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} kubectl"
+KUBECTL = "KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} #{$k8s_cli}"
 NS      = Shellwords.escape($k8s_namespace)
 
 def k8s_failure_handler(what_failed)

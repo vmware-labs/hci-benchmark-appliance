@@ -221,7 +221,16 @@ if $test_target != "k8s"
 end
 
 # K8s storage testing globals (loaded from k8s-conf.yaml when test_target == "k8s")
+# Use oc for OpenShift clusters, kubectl for everything else.
+# Detect by checking if the cluster has the OpenShift-only 'clusterversion' API.
 $k8s_kubeconfig     = entry["k8s_kubeconfig_path"] || "/opt/automation/conf/kubeconfig"
+$k8s_cli = if system("which oc > /dev/null 2>&1") &&
+              File.exist?($k8s_kubeconfig) &&
+              system("KUBECONFIG=#{Shellwords.escape($k8s_kubeconfig)} oc get clusterversion > /dev/null 2>&1")
+             "oc"
+           else
+             "kubectl"
+           end
 $k8s_namespace      = entry["k8s_namespace"] || "hcibench"
 $k8s_storage_class  = entry["k8s_storage_class"] || ""
 $k8s_pod_image      = entry["k8s_pod_image"] || "hcibench/fio:latest"

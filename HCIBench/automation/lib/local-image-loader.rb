@@ -60,6 +60,9 @@ def _find_host_root_pod(node, kubectl)
     ["kube-system", "app=flannel"],
     ["kube-system", "k8s-app=flannel"],
     ["kube-system", "k8s-app=weave-net"],
+    ["openshift-ovn-kubernetes", "app=ovnkube-node"],
+    ["openshift-multus", "app=multus"],
+    ["openshift-sdn", "app=sdn"],
   ]
 
   candidates.each do |ns, label|
@@ -99,7 +102,7 @@ end
 # Import a tar on a node by exec-ing into an existing privileged pod that has
 # the host root filesystem mounted at host_root.
 # Returns true on success, false on failure.
-def _import_via_host_pod(ns, pod, host_root, tar_name, tar_url, kubectl, log_file)
+def _import_via_host_pod(ns, pod, host_root, tar_name, tar_url, image_ref, kubectl, log_file)
   # Try wget first, fall back to curl
   cmd = "{ wget -q -O #{host_root}/tmp/#{tar_name} #{tar_url} 2>/dev/null || " \
         "  curl -fsSL -o #{host_root}/tmp/#{tar_name} #{tar_url}; } " \
@@ -107,6 +110,9 @@ def _import_via_host_pod(ns, pod, host_root, tar_name, tar_url, kubectl, log_fil
         "if test -S #{host_root}/run/containerd/containerd.sock 2>/dev/null; then " \
         "  chroot #{host_root} ctr --address /run/containerd/containerd.sock " \
         "    -n k8s.io images import /tmp/#{tar_name}; " \
+        "elif test -S #{host_root}/run/crio/crio.sock 2>/dev/null; then " \
+        "  chroot #{host_root} podman load -i /tmp/#{tar_name}; " \
+        "  chroot #{host_root} podman tag localhost/#{image_ref} docker.io/#{image_ref} 2>/dev/null; " \
         "elif test -S #{host_root}/var/run/docker.sock 2>/dev/null; then " \
         "  chroot #{host_root} docker load -i /tmp/#{tar_name}; " \
         "else echo 'ERROR: no supported container runtime socket'; exit 1; fi; " \
@@ -129,6 +135,7 @@ def _import_via_bootstrap_pod(node, tar_name, tar_url, kubectl, log_file)
       namespace: #{DS_NS}
     spec:
       nodeName: #{node}
+      serviceAccountName: hcibench-loader
       tolerations:
       - operator: Exists
       restartPolicy: Never
@@ -148,6 +155,8 @@ def _import_via_bootstrap_pod(node, tar_name, tar_url, kubectl, log_file)
           if chroot /host test -S /run/containerd/containerd.sock 2>/dev/null; then
             chroot /host ctr --address /run/containerd/containerd.sock \
               -n k8s.io images import /tmp/#{tar_name}
+          elif chroot /host test -S /run/crio/crio.sock 2>/dev/null; then
+            chroot /host podman load -i /tmp/#{tar_name}
           elif chroot /host test -S /var/run/docker.sock 2>/dev/null; then
             chroot /host docker load -i /tmp/#{tar_name}
           else
@@ -185,12 +194,12 @@ end
 # Bootstrap a single image tar onto a single node.
 # Prefers exec-ing into an existing privileged host-root pod; falls back to a
 # temporary bootstrap pod if none is available.
-def _bootstrap_on_node(node, tar_name, tar_url, kubectl, log_file)
+def _bootstrap_on_node(node, tar_name, tar_url, image_ref, kubectl, log_file)
   host_pod = _find_host_root_pod(node, kubectl)
   if host_pod
     ns, pod, host_root = host_pod
     puts "    Using #{ns}/#{pod} (host_root=#{host_root}) for bootstrap", log_file
-    ok = _import_via_host_pod(ns, pod, host_root, tar_name, tar_url, kubectl, log_file)
+    ok = _import_via_host_pod(ns, pod, host_root, tar_name, tar_url, image_ref, kubectl, log_file)
     return if ok
     puts "    [WARN] exec-based import failed — falling back to bootstrap pod", log_file
   else
@@ -223,12 +232,24 @@ def ensure_image_on_nodes(image_ref, kubectl, log_file)
     nodes = `#{kubectl} get nodes --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null`
               .split("\n").map(&:strip).reject(&:empty?)
 
+    # Create a service account with privileged SCC for OpenShift clusters
+    sa_yaml = <<~YAML
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: hcibench-loader
+        namespace: #{DS_NS}
+    YAML
+    IO.popen("#{kubectl} apply -f - 2>&1", "w+") { |io| io.write(sa_yaml); io.close_write; io.read }
+    # Grant privileged SCC (no-op on non-OpenShift clusters)
+    `#{kubectl} adm policy add-scc-to-user privileged -n #{DS_NS} -z hcibench-loader 2>/dev/null`
+
     # Step 1 — bootstrap busybox onto every node via an existing privileged CNI pod
     if File.exist?(BUSYBOX_TAR)
       puts "Bootstrapping busybox on #{nodes.size} nodes...", log_file
       nodes.each do |node|
         puts "  Loading busybox on #{node}", log_file
-        _bootstrap_on_node(node, _image_tar_name(BUSYBOX_REF), busybox_url, kubectl, log_file)
+        _bootstrap_on_node(node, _image_tar_name(BUSYBOX_REF), busybox_url, BUSYBOX_REF, kubectl, log_file)
       end
       puts "Busybox bootstrap complete.", log_file
     end
@@ -249,6 +270,7 @@ def ensure_image_on_nodes(image_ref, kubectl, log_file)
             labels:
               app: #{DS_NAME}
           spec:
+            serviceAccountName: hcibench-loader
             tolerations:
             - operator: Exists
             hostPID: true
@@ -267,6 +289,9 @@ def ensure_image_on_nodes(image_ref, kubectl, log_file)
                 if chroot /host test -S /run/containerd/containerd.sock 2>/dev/null; then
                   chroot /host ctr --address /run/containerd/containerd.sock \
                     -n k8s.io images import /tmp/#{tar_name}
+                elif chroot /host test -S /run/crio/crio.sock 2>/dev/null; then
+                  chroot /host podman load -i /tmp/#{tar_name}
+                  chroot /host podman tag localhost/#{image_ref} docker.io/#{image_ref} 2>/dev/null || true
                 elif chroot /host test -S /var/run/docker.sock 2>/dev/null; then
                   chroot /host docker load -i /tmp/#{tar_name}
                 else

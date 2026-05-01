@@ -35,6 +35,9 @@ if ps aux | grep "${SCRIPTNAME}" | grep -q ruby; then
    kill -9 $(list_descendants $PID)
    kill -9 $PID
 
+   # Clear old status so stale error messages don't persist after cancel
+   > $DIR/logs/test-status.log
+
    TEST_TARGET=$(cat /opt/automation/conf/test-mode 2>/dev/null || echo "vm")
    if [ "${TEST_TARGET}" = "k8s" ]; then
      echo "Process killed, cleaning up K8s pods, PVCs and namespace..." | tee -a $DIR/logs/test-status.log
