@@ -63,6 +63,9 @@ def _find_host_root_pod(node, kubectl)
     ["openshift-ovn-kubernetes", "app=ovnkube-node"],
     ["openshift-multus", "app=multus"],
     ["openshift-sdn", "app=sdn"],
+    ["openshift-cluster-node-tuning-operator", "openshift-app=tuned"],
+    ["openshift-monitoring", "app.kubernetes.io/name=node-exporter"],
+    ["openshift-machine-config-operator", "k8s-app=machine-config-daemon"],
   ]
 
   candidates.each do |ns, label|
@@ -191,9 +194,29 @@ def _import_via_bootstrap_pod(node, tar_name, tar_url, kubectl, log_file)
   `#{kubectl} delete pod #{pod_name} -n #{DS_NS} --ignore-not-found=true 2>/dev/null`
 end
 
+# Import via `oc debug node` — works on OpenShift without needing any pre-cached image.
+# Uses the node's own RHCOS image, so no Docker Hub pull required.
+def _import_via_oc_debug(node, tar_name, tar_url, image_ref, kubectl, log_file)
+  # Only available when using oc CLI
+  oc_cmd = kubectl.sub(/\S+\s*$/, 'oc')
+  return false unless system("#{oc_cmd} version --client > /dev/null 2>&1")
+
+  cmd = "{ curl -fsSL -o /host/tmp/#{tar_name} #{tar_url} 2>/dev/null || " \
+        "  wget -q -O /host/tmp/#{tar_name} #{tar_url}; } && " \
+        "if test -S /host/run/crio/crio.sock 2>/dev/null; then " \
+        "  chroot /host podman load -i /tmp/#{tar_name}; " \
+        "  chroot /host podman tag localhost/#{image_ref} docker.io/library/#{image_ref} 2>/dev/null; " \
+        "elif test -S /host/run/containerd/containerd.sock 2>/dev/null; then " \
+        "  chroot /host ctr --address /run/containerd/containerd.sock -n k8s.io images import /tmp/#{tar_name}; " \
+        "fi; rm -f /host/tmp/#{tar_name}"
+  result = `#{oc_cmd} debug node/#{Shellwords.escape(node)} -- sh -c #{Shellwords.escape(cmd)} 2>&1`
+  puts result, log_file
+  $?.exitstatus == 0
+end
+
 # Bootstrap a single image tar onto a single node.
-# Prefers exec-ing into an existing privileged host-root pod; falls back to a
-# temporary bootstrap pod if none is available.
+# Prefers exec-ing into an existing privileged host-root pod; falls back to
+# oc debug node (OpenShift) or a temporary bootstrap pod.
 def _bootstrap_on_node(node, tar_name, tar_url, image_ref, kubectl, log_file)
   host_pod = _find_host_root_pod(node, kubectl)
   if host_pod
@@ -201,10 +224,19 @@ def _bootstrap_on_node(node, tar_name, tar_url, image_ref, kubectl, log_file)
     puts "    Using #{ns}/#{pod} (host_root=#{host_root}) for bootstrap", log_file
     ok = _import_via_host_pod(ns, pod, host_root, tar_name, tar_url, image_ref, kubectl, log_file)
     return if ok
-    puts "    [WARN] exec-based import failed — falling back to bootstrap pod", log_file
+    puts "    [WARN] exec-based import failed — falling back", log_file
   else
-    puts "    No existing host-root pod found on #{node} — trying bootstrap pod", log_file
+    puts "    No existing host-root pod found on #{node}", log_file
   end
+
+  # Try oc debug node (OpenShift) — no pre-cached image needed
+  if _import_via_oc_debug(node, tar_name, tar_url, image_ref, kubectl, log_file)
+    puts "    Loaded via oc debug node/#{node}", log_file
+    return
+  end
+
+  # Last resort: bootstrap pod (requires Docker Hub access for busybox)
+  puts "    Falling back to bootstrap pod (requires image pull)", log_file
   _import_via_bootstrap_pod(node, tar_name, tar_url, kubectl, log_file)
 end
 
