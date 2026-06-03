@@ -218,6 +218,9 @@ if $test_target != "k8s"
   $perfsvc_master_nodes = []
   $vsan_debug_sharing_path = ""
   $share_folder_name = "vsan_debug"
+  # NFS export base: a persistent dir, NOT /tmp (which Photon wipes on reboot;
+  # stale entries in /etc/exports then break nfs-server.service at boot).
+  $nfs_export_base = "/opt/automation/tmp"
 end
 
 # K8s storage testing globals (loaded from k8s-conf.yaml when test_target == "k8s")
@@ -936,7 +939,7 @@ def _create_shared_folder(export_path,share_folder_name)
    if File.exists?($vsan_debug_sharing_path)
      FileUtils.rm_rf($vsan_debug_sharing_path)
    end
-   Dir.mkdir($vsan_debug_sharing_path)
+   FileUtils.mkdir_p($vsan_debug_sharing_path)
 
   return $vsan_debug_sharing_path
 end

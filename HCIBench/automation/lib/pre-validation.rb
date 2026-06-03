@@ -358,9 +358,9 @@ def validate_misc_info
       hosts_list_drop_cache = hosts_list_drop_cache | _get_hosts_list(_get_vsan_cluster_from_datastore(datastore_name))
     end
     if $vsan_debug
-      puts "vSAN Debug Mode is enabled, Create NFS target at /tmp/pre-validation"
-      _create_shared_folder('/tmp','pre-validation')
-      _update_export_info('/tmp/pre-validation')
+      puts "vSAN Debug Mode is enabled, Create NFS target at #{$nfs_export_base}/pre-validation"
+      _create_shared_folder($nfs_export_base,'pre-validation')
+      _update_export_info("#{$nfs_export_base}/pre-validation")
     end
     hosts_list_drop_cache = hosts_list_drop_cache | _get_hosts_list if $vsan_debug
     hosts_list_drop_cache.each do |host|
@@ -372,10 +372,10 @@ def validate_misc_info
       if $vsan_debug
         puts "Mount NFS target to #{host}"
         _mount_nfs_to_esxi(host)
-        if not File.exists?("/tmp/pre-validation/#{host}")
+        if not File.exists?("#{$nfs_export_base}/pre-validation/#{host}")
           _unmount_nfs_from_esxi(host)
           puts "Removing temporary NFS target"
-          _remove_export_info('/tmp/pre-validation')
+          _remove_export_info("#{$nfs_export_base}/pre-validation")
           err_msg "Can't mount NFS target to #{host}"
         end
         _unmount_nfs_from_esxi(host)
@@ -383,7 +383,7 @@ def validate_misc_info
     end
     if $vsan_debug
       puts "Removing temporary NFS target"
-      _remove_export_info('/tmp/pre-validation')
+      _remove_export_info("#{$nfs_export_base}/pre-validation")
     end
     puts "Hosts credential and SSH service is verified."
   end

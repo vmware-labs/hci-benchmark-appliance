@@ -34,7 +34,7 @@ if vsan_datastore_names != []
     @vsan_clusters_for_debug = @vsan_clusters_for_debug | [cluster_name]
     $observer_target_clusters_arr = $observer_target_clusters_arr | [cluster_name]
     $telegraf_target_clusters_map[cluster_name] = CGI.escape(cluster_name) if not $telegraf_target_clusters_map.key?(cluster_name) and _is_ps_enabled(cluster_name)
-  end
+end
 end
 
 #whether to call vsan performance diagnostic, it should only be called when testing on vsan ds
@@ -51,22 +51,22 @@ end
 
 def collectVmkStats(res_path,sleep_time)
   sleep(sleep_time)
-  puts "Create NFS Share on HCIBench, the path is /tmp/#{$share_folder_name}",@log_file
-  _create_shared_folder("/tmp",$share_folder_name)
+  puts "Create NFS Share on HCIBench, the path is #{$nfs_export_base}/#{$share_folder_name}",@log_file
+  _create_shared_folder($nfs_export_base,$share_folder_name)
   puts "Update NFS Exports Info...",@log_file
-  _update_export_info("/tmp/#{$share_folder_name}")
+  _update_export_info("#{$nfs_export_base}/#{$share_folder_name}")
   puts "Mount Shared Folder to Hosts...",@log_file
-  `ruby /opt/automation/lib/prep-host-vsan-debug.rb /tmp/#{$share_folder_name} false`
-  
+  `ruby /opt/automation/lib/prep-host-vsan-debug.rb #{$nfs_export_base}/#{$share_folder_name} false`
+
   `ruby /opt/automation/lib/collectVmkstats.rb #{res_path} "false"`
-  @vmk_collected = true  
+  @vmk_collected = true
   puts "Unmount Shared Folder from Hosts...",@log_file
-  `ruby /opt/automation/lib/prep-host-vsan-debug.rb /tmp/#{$share_folder_name} true`
-  _remove_export_info
-end
+  `ruby /opt/automation/lib/prep-host-vsan-debug.rb #{$nfs_export_base}/#{$share_folder_name} true`
+  end
 
 def processVmkStats(res_path)
-  `mv /tmp/#{$share_folder_name}/* "#{res_path}"`
+  `mv #{$nfs_export_base}/#{$share_folder_name}/* "#{res_path}"`
+  _remove_export_info("#{$nfs_export_base}/#{$share_folder_name}")
   `ruby /opt/automation/lib/collectVmkstats.rb "#{res_path}" "true"`
 end
 
