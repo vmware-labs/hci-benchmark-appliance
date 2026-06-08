@@ -8,7 +8,7 @@ HCIBench is not only a benchmark tool designed for vSAN, but also could be used 
 ## Try it out
 **Version**|**OVA**|**Release Date**
 :-----:|:-----:|:-----:
-3.0|[HCIBench 3.0](https://github.com/vmware-labs/hci-benchmark-appliance/releases/download/3.0/HCIBench\_3.0.ova)|5/25/2026
+3.0|[HCIBench 3.0](https://github.com/vmware-labs/hci-benchmark-appliance/releases/download/3.0/HCIBench\_3.0.ova)|6/8/2026
 2.8.3|[HCIBench 2.8.3](https://github.com/vmware-labs/hci-benchmark-appliance/releases/download/2.8.3/HCIBench\_2.8.3.ova)|5/23/2024
 2.8.2|[HCIBench 2.8.2](https://github.com/vmware-labs/hci-benchmark-appliance/releases/download/2.8.2/HCIBench\_2.8.2.ova)|6/6/2023
 2.8.1|[HCIBench 2.8.1](https://github.com/vmware-labs/hci-benchmark-appliance/releases/download/2.8.1/HCIBench\_2.8.1.ova)|2/10/2023
