@@ -43,7 +43,14 @@ if test_vsan
   host_num = _get_hosts_list(cluster_to_pick).count
   puts "vSAN #{local_type} Datastore Name: #{vsan_datastore_name}", @log_file
 
-  vsan_stats_hash = _get_vsan_disk_stats(cluster_to_pick)
+  begin
+    vsan_stats_hash = _get_vsan_disk_stats_or_fail(cluster_to_pick)
+  rescue StandardError => e
+    puts "------------------------------------------------------------------------------",@log_file
+    puts e.message,@log_file
+    puts "------------------------------------------------------------------------------",@log_file
+    exit(255)
+  end
   @dedup = vsan_stats_hash["Dedupe Scope"]
   disk_init = "ZERO" if @dedup == 0
 
@@ -193,7 +200,9 @@ vcpu = 4
 size_ram = 8
 
 `sed -i "s/^vm_prefix.*/vm_prefix: '#{pref}'/g" /opt/automation/conf/perf-conf.yaml`
-`sed -i "s/^number_vm.*/number_vm: #{@vm_num}/g" /opt/automation/conf/perf-conf.yaml`
+#number_vm may not exist yet (Easy Run's VM-count field is blank, so generateFile() never writes the key) - sed's s/// can't insert a missing line, so delete-then-append to upsert it
+`sed -i '/^number_vm/d' /opt/automation/conf/perf-conf.yaml`
+`echo "number_vm: #{@vm_num}" >> /opt/automation/conf/perf-conf.yaml`
 `sed -i "s/^number_cpu.*/number_cpu: #{vcpu}/g" /opt/automation/conf/perf-conf.yaml`
 `sed -i "s/^size_ram.*/size_ram: #{size_ram}/g" /opt/automation/conf/perf-conf.yaml`
 `sed -i "s/^number_data.*/number_data_disk: #{@data_disk_num}/g" /opt/automation/conf/perf-conf.yaml`

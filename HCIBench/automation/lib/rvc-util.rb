@@ -31,6 +31,12 @@ end
 _conf_file = $test_target == "k8s" \
   ? _k8s_conf \
   : _perf_conf
+if !File.exist?(_conf_file)
+  STDERR.puts "------------------------------------------------------------------------------"
+  STDERR.puts "ERROR: Configuration file not found: #{_conf_file}. Please save your configuration in the UI first."
+  STDERR.puts "------------------------------------------------------------------------------"
+  exit(1)
+end
 entry = YAML.load_file(_conf_file)
 #=====================2.8.1 bugs fix=======================
 entry.each { |item,value| entry[item] = nil if value == ""}
@@ -649,7 +655,7 @@ def _get_num_of_vm_to_deploy
   vsan_datastores = _get_vsandatastore_in_cluster
   test_vsan = (vsan_datastores == {} or (vsan_datastores.keys & $datastore_names).empty?) ? false : true
   if test_vsan
-    vsan_stats_hash = _get_vsan_disk_stats(_pick_vsan_cluster_for_easy_run)
+    vsan_stats_hash = _get_vsan_disk_stats_or_fail(_pick_vsan_cluster_for_easy_run)
     num_of_dg = vsan_stats_hash["Total number of Disk Groups"]
     $cl_path, $cl_path_escape = _get_cl_path if $cl_path == ""
     witness = `rvc #{$vc_rvc} --path #{$cl_path_escape} -c 'vsantest.vsan_hcibench.cluster_info .' -c 'exit' -q | grep -E "^Witness Host:"`.chomp
@@ -798,8 +804,14 @@ end
 #returning vsan disk stats detail table stats, sum stats
 def _get_vsan_disk_stats(cluster_name = $cluster_name)
   cl_path, cl_path_escape = _get_cl_path(cluster_name)
-  vsan_disk_stats_hash = eval(`rvc #{$vc_rvc} --path #{cl_path_escape} -c "vsantest.vsan_hcibench.get_vsan_disks_stats ." -c 'exit' -q`.chomp)
-  `govc vsan.info -json -dc "#{Shellwords.escape($dc_name)}" "#{Shellwords.escape(cluster_name)}" > null 2>&1`
+  rvc_output = `rvc #{$vc_rvc} --path #{cl_path_escape} -c "vsantest.vsan_hcibench.get_vsan_disks_stats ." -c 'exit' -q`.chomp
+  vsan_disk_stats_hash = begin
+    eval(rvc_output)
+  rescue Exception
+    nil
+  end
+  return {} if !vsan_disk_stats_hash.is_a?(Hash)
+  `govc vsan.info -json -dc "#{Shellwords.escape($dc_name)}" "#{Shellwords.escape(cluster_name)}" > /dev/null 2>&1`
   return {} if $? != 0
   vsan_stats_hash = JSON.parse(`govc vsan.info -json -dc "#{Shellwords.escape($dc_name)}" "#{Shellwords.escape(cluster_name)}"`.chomp)
   cluster_vsan_hash = vsan_stats_hash["clusters"][0]
@@ -816,7 +828,14 @@ def _get_vsan_disk_stats(cluster_name = $cluster_name)
   verbose_mode = perfsvc ? cluster_vsan_hash["info"]["PerfsvcConfig"]["VerboseMode"] : false
   $vsan_version = vsan_disk_stats_hash["vsan_version"]
  
-  return {"PerfSvc"=> perfsvc, "PerfSvc_verbose" => verbose_mode, "Total_Cache_Size"=> cache_size, "Total number of Disk Groups"=> cache_num, "Total number of Capacity Drives"=> capacity_num, "Total_Capacity_Size"=>capacity_size, "Total_Usable_Capacity"=>total_usable_capacity, "vSAN type"=>type,"Dedupe Scope"=> dedupe_scope, "Data at-Rest Encryption" => at_rest_encryption, "Data in-Transit Encryption" => in_transit_encryption} 
+  return {"PerfSvc"=> perfsvc, "PerfSvc_verbose" => verbose_mode, "Total_Cache_Size"=> cache_size, "Total number of Disk Groups"=> cache_num, "Total number of Capacity Drives"=> capacity_num, "Total_Capacity_Size"=>capacity_size, "Total_Usable_Capacity"=>total_usable_capacity, "vSAN type"=>type,"Dedupe Scope"=> dedupe_scope, "Data at-Rest Encryption" => at_rest_encryption, "Data in-Transit Encryption" => in_transit_encryption}
+end
+
+#same as _get_vsan_disk_stats but raises instead of silently returning {} on govc/rvc failure
+def _get_vsan_disk_stats_or_fail(cluster_name)
+  vsan_stats_hash = _get_vsan_disk_stats(cluster_name)
+  raise "Could not read vSAN stats for cluster #{cluster_name} (govc/rvc lookup failed), please retry" if vsan_stats_hash == {}
+  vsan_stats_hash
 end
 
 def _get_cluster_hosts_map_from_file(test_case_path)
@@ -971,11 +990,13 @@ def _mount_nfs_to_esxi(host)
   host_key = $hosts_credential.has_key?(host) ? host : $hosts_credential.keys[0]
   host_username = $hosts_credential[host_key]["host_username"]
   host_password = $hosts_credential[host_key]["host_password"]
+  mount_output = ""
   if ssh_valid(host,host_username,host_password)
     _unmount_nfs_from_esxi(host)
-    ssh_cmd(host,host_username,host_password,mount_cmd)
+    mount_output = ssh_cmd(host,host_username,host_password,mount_cmd)
     ssh_cmd(host,host_username,host_password,create_subfolder_cmd)
   end
+  mount_output
 end
 
 def _convert_perf_stats_to_json(file_path, metric_name)

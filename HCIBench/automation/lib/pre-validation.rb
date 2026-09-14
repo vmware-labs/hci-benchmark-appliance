@@ -371,12 +371,12 @@ def validate_misc_info
       err_msg "Check your network see if port 22 is blocked from HCIBench to Host #{host}, otherwise the Host #{host} Username or Password is NOT correct or SSH Service is not Enabled!" if !ssh_valid(host,host_username,host_password)
       if $vsan_debug
         puts "Mount NFS target to #{host}"
-        _mount_nfs_to_esxi(host)
+        mount_output = _mount_nfs_to_esxi(host)
         if not File.exists?("#{$nfs_export_base}/pre-validation/#{host}")
           _unmount_nfs_from_esxi(host)
           puts "Removing temporary NFS target"
           _remove_export_info("#{$nfs_export_base}/pre-validation")
-          err_msg "Can't mount NFS target to #{host}"
+          err_msg "Can't mount NFS target to #{host}#{mount_output.to_s.strip.empty? ? '' : ": #{mount_output.to_s.strip}"}"
         end
         _unmount_nfs_from_esxi(host)
       end
