@@ -68,6 +68,13 @@ if test_vsan
   policy_sftt = spbm_rule_map["VSAN.subFailuresToTolerate.subFailuresToTolerate"] || "0"
   policy_csc = spbm_rule_map["VSAN.checksumDisabled.checksumDisabled"] || "false"
   policy_ftm = spbm_rule_map["VSAN.replicaPreference.replicaPreference"].split(" ")[-1] || "RAID-1(Mirroring)-Performance" if spbm_rule_map["VSAN.replicaPreference.replicaPreference"]
+  # vSAN ESA's "Auto RAID" policy has no replicaPreference rule to read, so
+  # policy_ftm would otherwise silently stay at the RAID-1 mirroring default
+  # from the top of this file, and ftt_amplification below would assume 2x
+  # mirroring overhead instead of the real erasure-coding overhead - sizing
+  # test VMs smaller than the datastore can actually support.
+  is_auto_raid = spbm_rule_map["VSAN.autoManagedRAID.autoManagedRAID"] == "true"
+  policy_ftm, auto_raid_ftt, auto_raid_overhead = _resolve_auto_raid(cluster_to_pick) if is_auto_raid
 
   #policy_vsan_type = spbm_rule_map["VSAN.storageType.storageType"].split(" ")[-1] if spbm_rule_map.has_key?("VSAN.storageType.storageType")
   policy_compression_svc = ""
@@ -86,7 +93,7 @@ if test_vsan
   end
 
   policy_ftt = ( policy_pftt.to_i + 1 ) * ( policy_sftt.to_i + 1 )
-  ftt = policy_ftt.to_i
+  ftt = is_auto_raid ? auto_raid_ftt : policy_ftt.to_i
   total_cache_size = vsan_stats_hash["Total_Cache_Size"]
   num_of_dg = vsan_stats_hash["Total number of Disk Groups"]
   num_of_cap = vsan_stats_hash["Total number of Capacity Drives"]
@@ -117,10 +124,15 @@ if test_vsan
   end
 
   ftt_amplification = ftt
-  if policy_ftm.include? "Capacity"
+  if is_auto_raid
+    ftt_amplification = auto_raid_overhead
+  elsif policy_ftm.include? "Capacity"
+    # ESA RAID-5's 4+1 "adaptable" stripe (1.25x) needs a minimum of 6 hosts
+    # to be usable at all - a cluster with 5 hosts still uses the narrower
+    # 2+1 stripe (1.5x), so the cutover below was one host too low.
     ftt_amplification = 1.33 if ftt == 2 and $vsan_version == 1
-    ftt_amplification = 1.25 if ftt == 2 and $vsan_version == 2 and host_num > 4
-    ftt_amplification = 1.5 if ftt == 3 or (ftt == 2 and $vsan_version == 2 and host_num <= 4)
+    ftt_amplification = 1.25 if ftt == 2 and $vsan_version == 2 and host_num >= 6
+    ftt_amplification = 1.5 if ftt == 3 or (ftt == 2 and $vsan_version == 2 and host_num < 6)
   end
 else
   puts "

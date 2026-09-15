@@ -801,6 +801,62 @@ def _get_policy_rule_map(rules)
   return policy_rule_map
 end
 
+# vSAN ESA's "Auto-RAID" policy (VSAN.autoManagedRAID.autoManagedRAID) picks
+# FTT/RAID dynamically and exposes none of it as a static SPBM rule, so
+# callers that need a FTT/capacity-overhead number for sizing or reporting
+# can't read it from the policy rules like every other policy. This resolves
+# it from cluster topology instead, per VMware's documented Auto-RAID rules:
+# https://blogs.vmware.com/cloud-foundation/2026/05/08/auto-raid-in-vsan-for-vcf-9-1/
+#   Standard cluster, 6+ hosts : FTT=2, RAID-6, 1.5x capacity overhead
+#   Standard cluster, 3-5 hosts: FTT=1, RAID-5, 1.5x capacity overhead
+#   Standard cluster, <3 hosts : FTT=0, no redundancy, 1.0x overhead
+#   2-Node cluster (witnessed, <=2 hosts): RAID-1 mirror, FTT=0, 2.0x overhead
+#   Stretched cluster (witnessed, >2 hosts): site mirror + per-site erasure
+#     coding, 2.0x-3.0x overhead depending on per-site host count, which this
+#     helper has no way to query here, so it assumes the documented worst
+#     case (3.0x) to stay capacity-safe rather than risk overfilling.
+# Returns [display_label, ftt, capacity_overhead_multiplier].
+def _resolve_auto_raid(cluster_name)
+  host_num = _get_hosts_list(cluster_name).count
+  cl_path, cl_path_escape = _get_cl_path(cluster_name)
+  witness = `rvc #{$vc_rvc} --path #{cl_path_escape} -c 'vsantest.vsan_hcibench.cluster_info .' -c 'exit' -q | grep -E "^Witness Host:"`.chomp
+  if witness != "" and host_num <= 2
+    return ["Auto-RAID (2-Node, RAID-1 Mirror)", 0, 2.0]
+  elsif witness != ""
+    return ["Auto-RAID (Stretched Cluster)", 1, 3.0]
+  elsif host_num >= 6
+    return ["Auto-RAID (RAID-6, FTT=2)", 2, 1.5]
+  elsif host_num >= 3
+    return ["Auto-RAID (RAID-5, FTT=1)", 1, 1.5]
+  else
+    return ["Auto-RAID (No Redundancy, FTT=0)", 0, 1.0]
+  end
+end
+
+# Resolves the real capacity overhead multiplier for a MANUALLY configured
+# RAID-5/6 ("Capacity"/erasure-coding replicaPreference) policy - NOT the
+# Auto-RAID policy, see _resolve_auto_raid for that case. This depends on
+# both the policy's primary FTT level *and* cluster host count: ESA's RAID-5
+# silently narrows/widens its erasure-coding stripe based on host count even
+# for a single, fixed policy setting - vSAN uses a 2+1 stripe (1.5x overhead)
+# below 6 hosts and widens to a 4+1 "adaptable" stripe (1.25x overhead) at 6+
+# hosts, despite both being "the same" RAID-5 policy from the user's point of
+# view. A prior version of this code ignored host count and vSAN version
+# entirely and used flat OSA-era constants (1.33x/1.66x) for any RAID-5/6
+# policy regardless of architecture, which both mis-sized ESA RAID-5/6
+# capacity planning and got OSA RAID-6 wrong (it's 1.5x, not 1.66x).
+# Source: VMware "Comparing Erasure Code Options in vSAN ESA and OSA" table.
+#   OSA RAID-5 (FTT=1, 3+1 scheme):                        1.33x, any host count
+#   RAID-6 (FTT=2, 4+2 scheme, OSA or ESA):                1.5x, any host count
+#   ESA RAID-5 (FTT=1, 2+1 scheme, <6 hosts):              1.5x
+#   ESA RAID-5 (FTT=1, 4+1 "adaptable" scheme, >=6 hosts): 1.25x
+def _resolve_erasure_coding_overhead(policy_pftt, vsan_version, host_num)
+  return 1.5 if policy_pftt == 2
+  return 1.33 if policy_pftt == 1 and vsan_version == 1
+  return (host_num >= 6 ? 1.25 : 1.5) if policy_pftt == 1 and vsan_version == 2
+  return 1.5
+end
+
 #returning vsan disk stats detail table stats, sum stats
 def _get_vsan_disk_stats(cluster_name = $cluster_name)
   cl_path, cl_path_escape = _get_cl_path(cluster_name)
@@ -966,7 +1022,11 @@ end
 def _update_export_info(export_path)
   content = "#{export_path} *(rw,sync,no_root_squash,no_subtree_check,fsid=#{rand(999)})"
   File.write('/etc/exports',content)
-  `exportfs -r`
+  # nfs-server can be left in a failed state by any prior /etc/exports
+  # problem (stale entry, disk full, manual breakage, etc.) and exportfs
+  # alone won't restart rpc.mountd, so make sure the service is actually up.
+  system('systemctl is-active --quiet nfs-server || systemctl restart nfs-server')
+  system('exportfs -r')
 end
 
 def _remove_export_info(export_path)

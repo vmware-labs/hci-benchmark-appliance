@@ -49,6 +49,7 @@ try:
    from VsanConfigUtil import DATA_PROTECTION_ENABLED, isVsan2ResyncEtaMonitorEnabled
 except:
    DATA_PROTECTION_ENABLED = False
+   isVsan2ResyncEtaMonitorEnabled = lambda: False
 
 
 def commandsDescription(msg=None):

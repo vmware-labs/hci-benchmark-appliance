@@ -317,17 +317,24 @@ def validate_vsan_info
       rules = _get_storage_policy_rules($storage_policy)
     end
     spbm_rule_map = _get_policy_rule_map(rules)
+    vsan_lsom_cluster = _get_vsan_cluster_from_datastore(vsan_datastore_name)
     policy_pftt = spbm_rule_map["VSAN.hostFailuresToTolerate.hostFailuresToTolerate"] || "1"
     policy_sftt = spbm_rule_map["VSAN.subFailuresToTolerate.subFailuresToTolerate"] || "0"
     policy_ftm = spbm_rule_map["VSAN.replicaPreference.replicaPreference"] || "RAID-1 (Mirroring) - Performance"
-    if policy_ftm.include? "RAID-1"
+    # vSAN ESA's "Auto RAID" policy carries only VSAN.autoManagedRAID.autoManagedRAID
+    # and no replicaPreference rule at all, so it would otherwise silently fall
+    # through to the RAID-1 default above and trigger a bogus RAID-5 recommendation
+    # and mis-size rep_factor as mirroring instead of the actual erasure coding.
+    is_auto_raid = spbm_rule_map["VSAN.autoManagedRAID.autoManagedRAID"] == "true"
+    policy_ftm, _auto_raid_ftt, auto_raid_overhead = _resolve_auto_raid(vsan_lsom_cluster) if is_auto_raid
+    if is_auto_raid
+      rep_factor = auto_raid_overhead
+    elsif policy_ftm.include? "RAID-1"
       rep_factor = policy_pftt.to_i + 1
     else
-      rep_factor = 1.33 if policy_pftt.to_i == 1
-      rep_factor = 1.66 if policy_pftt.to_i == 2
+      rep_factor = _resolve_erasure_coding_overhead(policy_pftt.to_i, $vsan_version, _get_hosts_list(vsan_lsom_cluster).count)
     end
     @vsan_ds_rep_factor[vsan_datastore_name] = rep_factor * ( policy_sftt.to_i + 1 )
-    vsan_lsom_cluster = _get_vsan_cluster_from_datastore(vsan_datastore_name)
     vsan_stats_hash = _get_vsan_disk_stats(vsan_lsom_cluster)
     if not @use_random
       dedupe_scope = 0
@@ -344,7 +351,7 @@ def validate_vsan_info
     end
     if $vsan_version == 2
       warning_msg "Clear read/write cache will not be working on vSAN ESA cluster" if $clear_cache
-      warning_msg "vSAN ESA has better performance with Erasure Coding, recommend to use storage policy with RAID-#{policy_pftt.to_i+4} instead of RAID-1 with #{policy_pftt.to_i} failures tolerance" if policy_ftm.include? "RAID-1"
+      warning_msg "vSAN ESA has better performance with Erasure Coding, recommend to use storage policy with RAID-#{policy_pftt.to_i+4} instead of RAID-1 with #{policy_pftt.to_i} failures tolerance" if policy_ftm.include?("RAID-1") and not is_auto_raid
     end
   end
 end

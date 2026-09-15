@@ -37,6 +37,12 @@ def getVsanInfo(path)
       policy_pftt = policy_rule_map["VSAN.hostFailuresToTolerate.hostFailuresToTolerate"] || "1"
       policy_sftt = policy_rule_map["VSAN.subFailuresToTolerate.subFailuresToTolerate"] || "0"
       policy_csc = policy_rule_map["VSAN.checksumDisabled.checksumDisabled"] || "false"
+      # vSAN ESA's "Auto RAID" policy has no replicaPreference rule, so it
+      # would otherwise be silently misreported as RAID-1 above.
+      if policy_rule_map["VSAN.autoManagedRAID.autoManagedRAID"] == "true"
+        policy_ftm, auto_raid_ftt, _auto_raid_overhead = _resolve_auto_raid(cluster_to_pick)
+        policy_pftt = auto_raid_ftt.to_s
+      end
 
       policy_compression_svc = ""
       #policy_encryption_svc = ""
